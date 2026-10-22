@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Local application data (SQLite database lives here)
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Generated receipts (keep the folder itself)
+receipts/*
+!receipts/.gitkeep
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+
+requirements.txt
