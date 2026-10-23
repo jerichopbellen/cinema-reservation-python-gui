@@ -15,6 +15,9 @@ This project was created as a class activity for a Python elective subject.
 ## Features
 
 - Cinema-themed desktop interface
+- User registration and login
+- Secure password storage (PBKDF2-SHA256 with a random salt per user)
+- Profile management: edit your full name and change your password
 - Sample movies and showtimes
 - SQLite database for storing application data
 
@@ -44,12 +47,20 @@ cinema/
 │   ├── schema.py
 │   ├── seed.py
 │   └── inspect_db.py
+├── services/
+│   ├── auth_service.py
+│   └── session.py
 ├── ui/
+│   ├── app.py
+│   ├── auth_views.py
+│   ├── main_view.py
+│   ├── profile_view.py
 │   ├── styles.py
-│   └── main_view.py
+│   └── widgets.py
 ├── utils/
 │   └── formatting.py
 ├── tests/
+│   ├── test_auth.py
 │   └── test_database.py
 ├── assets/
 ├── receipts/

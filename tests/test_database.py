@@ -16,7 +16,7 @@ from database import initialize_database
 from database.connection import DEFAULT_DB_PATH, PROJECT_ROOT, connect, get_connection
 from database.schema import REQUIRED_TABLES
 from database.seed import SAMPLE_MOVIES, build_sample_showtimes
-from utils.formatting import format_peso
+from utils.formatting import format_local_date, format_peso
 
 
 class DatabaseTestCase(unittest.TestCase):
@@ -276,6 +276,12 @@ class FormattingTests(unittest.TestCase):
         self.assertEqual(format_peso(5), "₱0.05")
         self.assertEqual(format_peso(123456789), "₱1,234,567.89")
         self.assertEqual(format_peso(-1050), "-₱10.50")
+
+    def test_format_local_date_converts_from_utc(self) -> None:
+        stamp = "2026-10-23 23:30:00"
+        expected = dt.datetime(2026, 10, 23, 23, 30, tzinfo=dt.timezone.utc).astimezone()
+        self.assertEqual(format_local_date(stamp),
+                         f"{expected:%B} {expected.day}, {expected.year}")
 
 
 if __name__ == "__main__":

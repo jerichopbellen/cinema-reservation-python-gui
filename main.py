@@ -15,8 +15,10 @@ from pathlib import Path
 from tkinter import messagebox
 
 from database import initialize_database
+from services.auth_service import AuthService
+from services.session import Session
 from ui import styles
-from ui.main_view import MainView
+from ui.app import App
 
 logger = logging.getLogger("cinerojo")
 
@@ -33,19 +35,18 @@ def enable_windows_dpi_awareness() -> None:
         logger.debug("Could not enable DPI awareness: %s", exc)
 
 
-def build_app(db_path: Path) -> tk.Tk:
-    """Create the themed root window with the main view packed inside."""
+def build_app(db_path: Path) -> App:
+    """Create the themed root window and show the login screen."""
     root = tk.Tk()
     root.title(styles.WINDOW_TITLE)
     root.minsize(*styles.WINDOW_MIN_SIZE)
     styles.center_window(root, *styles.WINDOW_SIZE)
     styles.apply_theme(root)
 
-    MainView(root, status_detail=f"Database connected and initialized at:\n{db_path}").pack(
-        fill="both", expand=True
-    )
+    app = App(root, AuthService(db_path), Session(), db_path)
+    app.show_login()
     root.protocol("WM_DELETE_WINDOW", root.destroy)
-    return root
+    return app
 
 
 def show_startup_error(message: str) -> None:
@@ -67,8 +68,7 @@ def main() -> int:
         show_startup_error(f"The database could not be initialized.\n\n{exc}")
         return 1
 
-    root = build_app(db_path)
-    root.mainloop()
+    build_app(db_path).root.mainloop()
     return 0
 
 

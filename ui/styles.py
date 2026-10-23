@@ -13,7 +13,7 @@ APP_NAME = "CineRojo"
 APP_TAGLINE = "Your seat is waiting."
 WINDOW_TITLE = f"{APP_NAME} — Cinema Ticket Booking"
 WINDOW_SIZE = (1100, 700)
-WINDOW_MIN_SIZE = (900, 600)
+WINDOW_MIN_SIZE = (900, 660)
 
 # Colors
 BG_APP = "#1c1c1f"          # charcoal window background
@@ -26,6 +26,8 @@ TEXT_PRIMARY = "#ffffff"
 TEXT_MUTED = "#9a9aa3"
 TEXT_FAINT = "#6b6b74"      # placeholder hints
 TEXT_SUCCESS = "#4ade80"
+TEXT_ERROR = "#f87171"
+TEXT_DISABLED = "#5c5c64"
 
 # Typography (Segoe UI ships with Windows; Tk falls back gracefully elsewhere)
 FONT_FAMILY = "Segoe UI"
@@ -75,6 +77,66 @@ def apply_theme(root: tk.Tk) -> ttk.Style:
                     font=FONT_HEADING)
 
     style.configure("Footer.TLabel", background=BG_SURFACE, foreground=TEXT_MUTED, font=FONT_SMALL)
+
+    # Forms (rendered on Panel surfaces)
+    style.configure("PanelField.TLabel", background=BG_SURFACE_ALT, foreground=TEXT_PRIMARY,
+                    font=FONT_BODY)
+    style.configure("PanelValue.TLabel", background=BG_SURFACE_ALT, foreground=TEXT_PRIMARY,
+                    font=FONT_HEADING)
+    style.configure("PanelHint.TLabel", background=BG_SURFACE_ALT, foreground=TEXT_FAINT,
+                    font=FONT_SMALL)
+    style.configure("PanelError.TLabel", background=BG_SURFACE_ALT, foreground=TEXT_ERROR,
+                    font=FONT_SMALL)
+    style.configure("PanelSuccess.TLabel", background=BG_SURFACE_ALT, foreground=TEXT_SUCCESS,
+                    font=FONT_BODY)
+    style.configure("PanelFailure.TLabel", background=BG_SURFACE_ALT, foreground=TEXT_ERROR,
+                    font=FONT_BODY)
+    style.configure(
+        "TEntry",
+        fieldbackground=BG_SURFACE, foreground=TEXT_PRIMARY, insertcolor=TEXT_PRIMARY,
+        bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER, padding=(SPACE_SM, 6),
+    )
+    style.map(
+        "TEntry",
+        bordercolor=[("focus", ACCENT)], lightcolor=[("focus", ACCENT)],
+        fieldbackground=[("readonly", BG_SURFACE_ALT)],
+    )
+
+    # Buttons
+    style.configure(
+        "Accent.TButton", background=ACCENT, foreground=TEXT_PRIMARY, font=FONT_NAV,
+        borderwidth=0, focusthickness=0, padding=(SPACE_MD, SPACE_SM),
+    )
+    style.map(
+        "Accent.TButton",
+        background=[("disabled", BORDER), ("pressed", ACCENT_DARK), ("active", ACCENT_DARK)],
+        foreground=[("disabled", TEXT_DISABLED)],
+    )
+    style.configure(
+        "Secondary.TButton", background=BG_SURFACE_ALT, foreground=TEXT_PRIMARY, font=FONT_BODY,
+        bordercolor=BORDER, lightcolor=BG_SURFACE_ALT, darkcolor=BG_SURFACE_ALT,
+        focusthickness=0, padding=(SPACE_MD, 6),
+    )
+    style.map("Secondary.TButton", background=[("active", BORDER)],
+              foreground=[("disabled", TEXT_DISABLED)])
+    for name, surface in (("Link.TButton", BG_SURFACE_ALT), ("AppLink.TButton", BG_APP)):
+        style.configure(name, background=surface, foreground=ACCENT, font=FONT_BODY,
+                        borderwidth=0, focusthickness=0, padding=0)
+        style.map(name, background=[("active", surface)], foreground=[("active", TEXT_PRIMARY)])
+
+    # Header navigation
+    style.configure("NavLink.TButton", background=BG_SURFACE, foreground=TEXT_PRIMARY,
+                    font=FONT_NAV, borderwidth=0, focusthickness=0, padding=0)
+    style.map("NavLink.TButton", background=[("active", BG_SURFACE)],
+              foreground=[("active", ACCENT)])
+    style.configure("NavCurrent.TLabel", background=BG_SURFACE, foreground=ACCENT, font=FONT_NAV)
+    style.configure("HeaderUser.TLabel", background=BG_SURFACE, foreground=TEXT_MUTED,
+                    font=FONT_SMALL)
+    style.configure("Header.TButton", background=BG_SURFACE, foreground=TEXT_PRIMARY,
+                    font=FONT_SMALL, bordercolor=BORDER, lightcolor=BG_SURFACE,
+                    darkcolor=BG_SURFACE, focusthickness=0, padding=(SPACE_MD, SPACE_XS))
+    style.map("Header.TButton", background=[("active", ACCENT_DARK)],
+              bordercolor=[("active", ACCENT_DARK)])
     return style
 
 
