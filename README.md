@@ -1,4 +1,4 @@
-# Cinema Ticket Booking System
+# Cinemalaya
 
 A desktop cinema ticket booking system built with Python, Tkinter, and SQLite.
 
@@ -14,9 +14,10 @@ This project was created as a class activity for a Python elective subject.
 
 ## Features
 
+- Modern dark desktop interface with sidebar navigation, toast notifications, and a dark Windows title bar
 - User registration, login, and logout with salted PBKDF2 password hashing
 - Profile editing and password changes
-- Movie catalog with genre, running time, age rating, and ticket price
+- Movie catalog with genre, running time, age rating, ticket price, and generated genre posters
 - Upcoming showtime selection
 - Interactive seat map (rows A–H, seats 1–10) showing available, selected, and booked seats
 - Live ticket totals as seats are selected
@@ -64,9 +65,11 @@ cinema/
 ├── ui/
 │   ├── app.py
 │   ├── auth_views.py
+│   ├── brand.py
 │   ├── booking_views.py
 │   ├── main_view.py
 │   ├── movie_views.py
+│   ├── posters.py
 │   ├── profile_view.py
 │   ├── seating_view.py
 │   ├── styles.py
@@ -79,7 +82,8 @@ cinema/
 │   ├── test_auth.py
 │   ├── test_booking.py
 │   ├── test_catalog.py
-│   └── test_database.py
+│   ├── test_database.py
+│   └── test_posters.py
 ├── assets/
 ├── receipts/
 └── data/       

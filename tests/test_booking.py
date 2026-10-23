@@ -41,7 +41,7 @@ from services.seating_service import Seat, SeatingService
 from tests.helpers import START_CLOCK, FakeClock, create_seeded_database
 from utils.formatting import format_local_datetime, format_show_date, format_show_time
 
-REFERENCE_PATTERN = re.compile(r"CR-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{10}")
+REFERENCE_PATTERN = re.compile(r"CM-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{10}")
 
 
 class BookingTestCase(unittest.TestCase):
@@ -212,9 +212,10 @@ class BookingReferenceTests(BookingTestCase):
     def test_reference_collision_is_retried(self) -> None:
         existing = self.bookings.create_booking(self.alice, self.show.id, ["A1"]).reference
         with mock.patch.object(booking_service, "generate_booking_reference",
-                               side_effect=[existing, "CR-NEWREF2345"]),                 self.assertLogs(booking_service.logger, "WARNING"):
+                               side_effect=[existing, "CM-NEWREF2345"]), \
+                self.assertLogs(booking_service.logger, "WARNING"):
             booking = self.bookings.create_booking(self.bob, self.show.id, ["A2"])
-        self.assertEqual(booking.reference, "CR-NEWREF2345")
+        self.assertEqual(booking.reference, "CM-NEWREF2345")
 
     def test_persistent_collisions_fail_without_partial_rows(self) -> None:
         existing = self.bookings.create_booking(self.alice, self.show.id, ["A1"]).reference
@@ -377,7 +378,7 @@ class ReceiptTests(BookingTestCase):
         booking = self.bookings.create_booking(self.alice, self.show.id, ["C2", "C3"])
         saved = self.bookings.get_booking(self.alice, booking.id)
         text = render_receipt(saved, generated_at=dt.datetime(2030, 1, 2, 12, 30))
-        for expected in ("CINEROJO", saved.reference, "Alice Reyes", "The Last Lighthouse Keeper",
+        for expected in ("CINEMALAYA", saved.reference, "Alice Reyes", "The Last Lighthouse Keeper",
                          format_show_date(saved.starts_at.date()), format_show_time(saved.starts_at),
                          format_local_datetime(saved.created_at),
                          saved.auditorium, "C2, C3", "Tickets           2",
@@ -421,7 +422,7 @@ class ReceiptTests(BookingTestCase):
         self.assertIn("B9, B10", flattened)
 
     def test_receipt_filename_is_safe_and_directory_is_project_relative(self) -> None:
-        self.assertEqual(receipt_filename("CR-ABCDE23456"), "receipt_CR-ABCDE23456.txt")
+        self.assertEqual(receipt_filename("CM-ABCDE23456"), "receipt_CM-ABCDE23456.txt")
         self.assertEqual(receipt_filename("../../evil\\name"), "receipt_evilname.txt")
         self.assertEqual(RECEIPTS_DIR, PROJECT_ROOT / "receipts")
 

@@ -1,4 +1,4 @@
-"""Login and registration screens."""
+"""Login and registration screens: a paper "poster" panel beside the form."""
 
 from __future__ import annotations
 
@@ -6,25 +6,47 @@ from tkinter import ttk
 from typing import TYPE_CHECKING
 
 from services.auth_service import PASSWORD_RULES, USERNAME_RULES, User
-from ui import styles
-from ui.widgets import Form, FormField, StatusMessage, panel, run_in_background, user_message_for
+from ui import brand, styles
+from ui.widgets import Form, FormField, StatusMessage, run_in_background, user_message_for
 
 if TYPE_CHECKING:
     from ui.app import App
 
 
-class _CenteredCard(ttk.Frame):
-    """App-colored screen with a single panel centered in it."""
+class _AuthLayout(ttk.Frame):
+    """Full-window split: brand poster on the left, the form (``self.card``) centered on the right."""
 
-    def __init__(self, master: ttk.Frame, title: str, subtitle: str) -> None:
-        super().__init__(master, style="App.TFrame")
-        self.card = panel(self, title, subtitle)
-        self.card.place(relx=0.5, rely=0.47, anchor="center")
+    def __init__(self, master: ttk.Frame, eyebrow: str, title: str, subtitle: str) -> None:
+        super().__init__(master, style="Panel.TFrame")
+        self.columnconfigure(0, weight=5, uniform="auth")
+        self.columnconfigure(1, weight=6, uniform="auth")
+        self.rowconfigure(0, weight=1)
+
+        hero = ttk.Frame(self, style="Paper.TFrame", padding=(56, 48))
+        hero.grid(row=0, column=0, sticky="nsew")
+        brand.logo(hero, background=styles.PAPER, foreground=styles.ON_ACCENT, large=True,
+                   tagline_color="#4A4A4A").pack(anchor="w")
+        ttk.Label(hero, text="OFFLINE  ·  YOUR DATA STAYS ON THIS COMPUTER",
+                  style="PaperEyebrow.TLabel").pack(side="bottom", anchor="w")
+        ttk.Label(hero, text="Browse films, pick seats on a live map, and keep every ticket in one place.",
+                  style="PaperBody.TLabel", wraplength=380, justify="left").pack(
+            side="bottom", anchor="w", pady=(0, styles.SPACE_XL))
+        ttk.Label(hero, text="Your seat\nis waiting.", style="PaperDisplay.TLabel",
+                  justify="left").pack(side="bottom", anchor="w", pady=(0, styles.SPACE_MD))
+
+        holder = ttk.Frame(self, style="Panel.TFrame")
+        holder.grid(row=0, column=1, sticky="nsew")
+        self.card = ttk.Frame(holder, style="Panel.TFrame")
+        self.card.place(relx=0.5, rely=0.5, anchor="center")
+        ttk.Label(self.card, text=eyebrow.upper(), style="PanelEyebrow.TLabel").pack(anchor="w")
+        ttk.Label(self.card, text=title, style="PanelDisplay.TLabel").pack(anchor="w")
+        ttk.Label(self.card, text=subtitle, style="PanelBody.TLabel").pack(
+            anchor="w", pady=(2, styles.SPACE_MD))
 
 
-class LoginView(_CenteredCard):
+class LoginView(_AuthLayout):
     def __init__(self, master: ttk.Frame, app: App, *, message: str = "", username: str = "") -> None:
-        super().__init__(master, "Log in", f"Welcome to {styles.APP_NAME}. Sign in to continue.")
+        super().__init__(master, "Welcome back", "Log in", "Sign in to book and manage your tickets.")
         self.app = app
 
         notice = StatusMessage(self.card)
@@ -33,8 +55,8 @@ class LoginView(_CenteredCard):
             notice.pack(anchor="w", pady=(styles.SPACE_SM, 0))
 
         fields = {
-            "username": FormField(self.card, "Username"),
-            "password": FormField(self.card, "Password", secret=True),
+            "username": FormField(self.card, "Username", width=40),
+            "password": FormField(self.card, "Password", secret=True, width=40),
         }
         for field in fields.values():
             field.pack(fill="x", pady=(styles.SPACE_SM, 0))
@@ -80,9 +102,9 @@ class LoginView(_CenteredCard):
         self.form.fields["password"].entry.focus_set()
 
 
-class RegisterView(_CenteredCard):
+class RegisterView(_AuthLayout):
     def __init__(self, master: ttk.Frame, app: App) -> None:
-        super().__init__(master, "Create an account", "All fields are required.")
+        super().__init__(master, "New here", "Create an account", "All fields are required.")
         self.app = app
 
         # Two-column grid keeps the form short enough for the default window height.

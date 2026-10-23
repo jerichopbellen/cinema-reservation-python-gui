@@ -45,6 +45,8 @@ from utils.formatting import (
 if TYPE_CHECKING:
     from ui.app import App
 
+CHECK_GLYPH = "\uE73E"  # Segoe Fluent Icons check mark
+
 BADGE_STYLES = {
     DISPLAY_CANCELED: "BadgeCanceled.TLabel",
     DISPLAY_COMPLETED: "BadgeCompleted.TLabel",
@@ -64,7 +66,7 @@ def detail_grid(parent: tk.Misc, rows: list[tuple[str, str]], *, value_style: st
     return grid
 
 
-def save_receipt_with_dialog(parent: tk.Misc, booking: BookingDetails, status: StatusMessage) -> None:
+def save_receipt_with_dialog(parent: tk.Misc, app: App, booking: BookingDetails) -> None:
     """Ask where to save the receipt, then write it. A canceled dialog does nothing."""
     RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
     path = filedialog.asksaveasfilename(
@@ -77,17 +79,17 @@ def save_receipt_with_dialog(parent: tk.Misc, booking: BookingDetails, status: S
     try:
         saved = save_receipt(booking, path)
     except OSError as exc:
-        status.error(f"The receipt could not be saved: {exc.strerror or exc}. "
-                     "Please choose another location.")
+        app.toast(f"The receipt could not be saved: {exc.strerror or exc}. "
+                  "Please choose another location.", error=True)
         return
-    status.success(f"Receipt saved to {saved}")
+    app.toast(f"Receipt saved to {saved}")
 
 
 # --- Checkout -----------------------------------------------------------------
 
 class CheckoutView(ttk.Frame):
     def __init__(self, master: ttk.Frame, app: App, user: User) -> None:
-        super().__init__(master, style="App.TFrame", padding=(styles.SPACE_XL, styles.SPACE_MD))
+        super().__init__(master, style="App.TFrame", padding=(styles.SPACE_XL, styles.SPACE_XL - 8))
         self.app = app
         self.user = user
         self.busy = False
@@ -116,9 +118,10 @@ class CheckoutView(ttk.Frame):
         app.session.pending_checkout = checkout
         self.checkout = checkout
 
-        screen_title(self, "Checkout", "← Back to seat selection", self._back_to_seats,
-                     subtitle="Review your booking, then confirm to reserve your seats.").pack(
-            fill="x", pady=(0, styles.SPACE_MD))
+        screen_title(self, "Review and confirm", "← Back to seat selection", self._back_to_seats,
+                     eyebrow="Checkout",
+                     subtitle="Check the details below, then confirm to reserve your seats.").pack(
+            fill="x", pady=(0, styles.SPACE_LG))
 
         columns = ttk.Frame(self, style="App.TFrame")
         columns.pack(fill="x")
@@ -163,7 +166,7 @@ class CheckoutView(ttk.Frame):
         return card
 
     def _dead_end(self, title: str, message: str, *, back_to_seats: bool = False) -> None:
-        screen_title(self, "Checkout").pack(fill="x", pady=(0, styles.SPACE_MD))
+        screen_title(self, "Checkout", eyebrow="Checkout").pack(fill="x", pady=(0, styles.SPACE_LG))
         box = message_panel(self, title, message, error=back_to_seats)
         box.pack(fill="x")
         actions = ttk.Frame(box, style="Panel.TFrame")
@@ -224,7 +227,7 @@ class CheckoutView(ttk.Frame):
 
 class ConfirmationView(ttk.Frame):
     def __init__(self, master: ttk.Frame, app: App, user: User, booking_id: int) -> None:
-        super().__init__(master, style="App.TFrame", padding=(styles.SPACE_XL, styles.SPACE_MD))
+        super().__init__(master, style="App.TFrame", padding=(styles.SPACE_XL, styles.SPACE_XL - 8))
         self.app = app
         try:
             booking = app.bookings.get_booking(user.id, booking_id)
@@ -234,13 +237,18 @@ class ConfirmationView(ttk.Frame):
             return
         self.booking = booking
 
-        screen_title(self, "Booking confirmed").pack(fill="x")
-        ttk.Label(self, text="✓  Your seats are reserved. Enjoy the show!", style="Success.TLabel").pack(
-            anchor="w", pady=(0, styles.SPACE_MD))
+        hero = ttk.Frame(self, style="App.TFrame")
+        hero.pack(fill="x", pady=(0, styles.SPACE_LG))
+        tk.Label(hero, text=CHECK_GLYPH, font=(styles.FONT_ICON[0], 22), background=styles.ACCENT,
+                 foreground=styles.ON_ACCENT, width=3, height=1, pady=10).pack(side="left", anchor="n")
+        heading = ttk.Frame(hero, style="App.TFrame")
+        heading.pack(side="left", padx=(styles.SPACE_LG, 0))
+        screen_title(heading, "You're all set", eyebrow="Booking confirmed",
+                     subtitle="Your seats are reserved. Enjoy the show!").pack(anchor="w")
 
         card = ttk.Frame(self, style="Panel.TFrame", padding=styles.SPACE_LG)
         card.pack(fill="x")
-        ttk.Label(card, text="Booking reference", style="PanelHint.TLabel").pack(anchor="w")
+        ttk.Label(card, text="BOOKING REFERENCE", style="PanelEyebrow.TLabel").pack(anchor="w")
         ttk.Label(card, text=booking.reference, style="PanelReference.TLabel").pack(anchor="w")
         detail_grid(card, [
             ("Movie", booking.movie_title),
@@ -255,29 +263,25 @@ class ConfirmationView(ttk.Frame):
         for text, style, command in (
             ("View Receipt", "Accent.TButton", lambda: app.show_receipt(booking.id, "confirmation")),
             ("Save Receipt to File", "Secondary.TButton",
-             lambda: save_receipt_with_dialog(self, booking, self.status)),
+             lambda: save_receipt_with_dialog(self, app, booking)),
             ("View My Bookings", "Secondary.TButton", app.show_bookings),
             ("Return to Movies", "Secondary.TButton", app.show_movies),
         ):
             ttk.Button(actions, text=text, style=style, cursor="hand2", command=command).pack(
                 side="left", padx=(0, styles.SPACE_SM))
-        self.status = StatusMessage(card, wraplength=800)
-        self.status.pack(anchor="w", pady=(styles.SPACE_SM, 0))
 
 
 # --- Booking history ------------------------------------------------------------
 
 class BookingsView(ttk.Frame):
-    def __init__(self, master: ttk.Frame, app: App, user: User, message: str = "") -> None:
-        super().__init__(master, style="App.TFrame", padding=(styles.SPACE_XL, styles.SPACE_MD))
+    def __init__(self, master: ttk.Frame, app: App, user: User) -> None:
+        super().__init__(master, style="App.TFrame", padding=(styles.SPACE_XL, styles.SPACE_XL - 8))
         self.app = app
         self.user = user
 
-        screen_title(self, "My Bookings", "Browse movies →", app.show_movies,
+        screen_title(self, "My Bookings", eyebrow="Tickets",
                      subtitle="Upcoming bookings are listed first, followed by past and canceled ones."
-                     ).pack(fill="x")
-        if message:
-            ttk.Label(self, text=message, style="Success.TLabel").pack(anchor="w", pady=(styles.SPACE_XS, 0))
+                     ).pack(fill="x", pady=(0, styles.SPACE_SM))
 
         try:
             bookings = app.bookings.list_bookings(user.id)
@@ -302,11 +306,22 @@ class BookingsView(ttk.Frame):
                 row=index, column=0, sticky="ew", pady=(0, styles.SPACE_SM))
 
     def _booking_card(self, parent: ttk.Frame, booking: BookingDetails, now) -> ttk.Frame:
-        card = ttk.Frame(parent, style="Panel.TFrame", padding=(styles.SPACE_LG, styles.SPACE_MD))
-        card.columnconfigure(0, weight=1)
+        card = ttk.Frame(parent, style="Panel.TFrame", padding=(0, 0, styles.SPACE_LG, 0))
+        card.columnconfigure(1, weight=1)
 
-        info = ttk.Frame(card, style="Panel.TFrame")
-        info.grid(row=0, column=0, sticky="w")
+        # Ticket-stub date block
+        stub = tk.Frame(card, background=styles.BG_RAISED)
+        stub.grid(row=0, column=0, sticky="ns", padx=(0, styles.SPACE_LG))
+        for text, font, color, pad in (
+            (f"{booking.starts_at:%b}".upper(), styles.FONT_EYEBROW, styles.TEXT_MUTED, (14, 0)),
+            (str(booking.starts_at.day), (styles.FONT_DISPLAY[0], 24, "bold"), styles.TEXT_PRIMARY, 0),
+            (format_show_time(booking.starts_at), styles.FONT_EYEBROW, styles.TEXT_MUTED, (0, 14)),
+        ):
+            tk.Label(stub, text=text, font=font, background=styles.BG_RAISED, foreground=color,
+                     width=9).pack(pady=pad)
+
+        info = ttk.Frame(card, style="Panel.TFrame", padding=(0, styles.SPACE_MD))
+        info.grid(row=0, column=1, sticky="w")
         top = ttk.Frame(info, style="Panel.TFrame")
         top.pack(anchor="w")
         ttk.Label(top, text=booking.movie_title, style="PanelHeading.TLabel").pack(side="left")
@@ -326,7 +341,7 @@ class BookingsView(ttk.Frame):
                   style="PanelHint.TLabel").pack(anchor="w")
 
         actions = ttk.Frame(card, style="Panel.TFrame")
-        actions.grid(row=0, column=1, sticky="e")
+        actions.grid(row=0, column=2, sticky="e")
         ttk.Button(actions, text="View Receipt", style="Secondary.TButton", cursor="hand2",
                    command=lambda: self.app.show_receipt(booking.id, "bookings")).pack(fill="x")
         if booking.can_cancel(now):
@@ -353,8 +368,8 @@ class BookingsView(ttk.Frame):
         except EXPECTED_ERRORS as exc:
             messagebox.showerror("Booking not canceled", user_message_for(exc), parent=self)
             return
-        self.app.show_bookings(
-            message=f"Booking {canceled.reference} was canceled and its seats were released.")
+        self.app.show_bookings()
+        self.app.toast(f"Booking {canceled.reference} was canceled and its seats were released.")
 
 
 # --- Receipt ----------------------------------------------------------------------
@@ -362,12 +377,13 @@ class BookingsView(ttk.Frame):
 class ReceiptView(ttk.Frame):
     def __init__(self, master: ttk.Frame, app: App, user: User, booking_id: int,
                  back_to: str = "bookings") -> None:
-        super().__init__(master, style="App.TFrame", padding=(styles.SPACE_XL, styles.SPACE_MD))
+        super().__init__(master, style="App.TFrame", padding=(styles.SPACE_XL, styles.SPACE_XL - 8))
         back: Callable[[], None] = (
             (lambda: app.show_confirmation(booking_id)) if back_to == "confirmation" else app.show_bookings
         )
         back_text = "← Back to confirmation" if back_to == "confirmation" else "← Back to My Bookings"
-        screen_title(self, "Receipt", back_text, back).pack(fill="x", pady=(0, styles.SPACE_SM))
+        screen_title(self, "Receipt", back_text, back, eyebrow="Tickets").pack(
+            fill="x", pady=(0, styles.SPACE_LG))
 
         try:
             booking = app.bookings.get_booking(user.id, booking_id)
@@ -377,10 +393,10 @@ class ReceiptView(ttk.Frame):
 
         body = ttk.Frame(self, style="App.TFrame")
         body.pack(fill="both", expand=True)
-        text = tk.Text(body, width=50, font=styles.FONT_MONO, background=styles.BG_SURFACE,
-                       foreground=styles.TEXT_PRIMARY, relief="flat", padx=styles.SPACE_LG,
-                       pady=styles.SPACE_MD, highlightthickness=1, highlightbackground=styles.BORDER,
-                       wrap="none")
+        text = tk.Text(body, width=50, font=styles.FONT_MONO, background=styles.PAPER,
+                       foreground=styles.ON_ACCENT, relief="flat", padx=styles.SPACE_LG + 4,
+                       pady=styles.SPACE_LG, highlightthickness=0, wrap="none",
+                       selectbackground=styles.ACCENT, selectforeground=styles.ON_ACCENT)
         text.insert("1.0", render_receipt(booking))
         text.configure(state="disabled")
         scrollbar = ttk.Scrollbar(body, orient="vertical", command=text.yview)
@@ -393,8 +409,6 @@ class ReceiptView(ttk.Frame):
         card = panel(side, "Keep a copy", "Save this receipt as a text file. The default "
                      "folder is the app's receipts folder.", wraplength=280)
         card.pack(fill="x")
-        status = StatusMessage(card, wraplength=280)
         ttk.Button(card, text="Save Receipt to File", style="Accent.TButton", cursor="hand2",
-                   command=lambda: save_receipt_with_dialog(self, booking, status)).pack(
+                   command=lambda: save_receipt_with_dialog(self, app, booking)).pack(
             fill="x", pady=(styles.SPACE_MD, 0))
-        status.pack(anchor="w", pady=(styles.SPACE_SM, 0))

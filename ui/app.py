@@ -3,7 +3,9 @@
 Exactly one screen is shown at a time. Switching screens destroys the previous
 screen's widgets, so password fields and stale profile data never linger.
 Authenticated screens go through :meth:`App._show_protected`, which redirects
-to the login screen when there is no active session.
+to the login screen when there is no active session. They are framed by a
+sidebar with navigation and the signed-in account; the login and registration
+screens use the whole window.
 
 Unexpected exceptions raised in Tk callbacks are logged with a traceback and
 reported to the user with a plain message; tracebacks are never shown.
@@ -23,25 +25,26 @@ from services.booking_service import BookingService
 from services.catalog_service import CatalogService
 from services.seating_service import SeatingService
 from services.session import Session
-from ui import styles
+from ui import brand, styles
 from ui.auth_views import LoginView, RegisterView
 from ui.booking_views import BookingsView, CheckoutView, ConfirmationView, ReceiptView
 from ui.main_view import HomeView
 from ui.movie_views import MoviesView, ShowtimesView
-from ui.profile_view import ProfileView
+from ui.profile_view import ProfileView, initials
 from ui.seating_view import SeatingView
-from ui.widgets import DATABASE_ERROR_MESSAGE, UNEXPECTED_ERROR_MESSAGE
+from ui.widgets import DATABASE_ERROR_MESSAGE, UNEXPECTED_ERROR_MESSAGE, NavItem
 from utils.formatting import truncate
 
 logger = logging.getLogger(__name__)
 
 MOVIE_SCREENS = ("movies", "showtimes", "seating", "checkout", "confirmation")
 BOOKING_SCREENS = ("bookings", "receipt")
-HEADER_NAME_LIMIT = 28
+SIDEBAR_NAME_LIMIT = 20
+TOAST_MILLISECONDS = 3500
 
 
 class App:
-    """Owns the root window's header, content area, and footer, and handles navigation."""
+    """Owns the root window's sidebar, content area, and toasts, and handles navigation."""
 
     def __init__(self, root: tk.Tk, auth: AuthService, session: Session, db_path: Path) -> None:
         self.root = root
@@ -52,15 +55,17 @@ class App:
         self.seating = SeatingService(db_path, self.catalog)
         self.bookings = BookingService(db_path, self.catalog)
 
-        self._header = ttk.Frame(root, style="Surface.TFrame")
-        self._header.pack(fill="x")
-        ttk.Frame(root, style="Accent.TFrame", height=3).pack(fill="x")
-        self._build_footer()
+        self._sidebar = ttk.Frame(root, style="Surface.TFrame", width=styles.SIDEBAR_WIDTH)
+        self._sidebar.pack_propagate(False)
+        self._divider = ttk.Frame(root, style="Divider.TFrame", width=1)
         self._content = ttk.Frame(root, style="App.TFrame")
-        self._content.pack(fill="both", expand=True)
+        self._content.pack(side="right", fill="both", expand=True)
 
+        self.nav_items: dict[str, NavItem] = {}
         self._screen: ttk.Frame | None = None
         self._current = ""
+        self._toast: ttk.Frame | None = None
+        self._toast_timer: str | None = None
         root.report_callback_exception = self._on_callback_error
 
     # --- Public navigation ----------------------------------------------------
@@ -93,8 +98,8 @@ class App:
         self._show_protected("confirmation",
                              lambda parent, user: ConfirmationView(parent, self, user, booking_id))
 
-    def show_bookings(self, message: str = "") -> None:
-        self._show_protected("bookings", lambda parent, user: BookingsView(parent, self, user, message))
+    def show_bookings(self) -> None:
+        self._show_protected("bookings", lambda parent, user: BookingsView(parent, self, user))
 
     def show_receipt(self, booking_id: int, back_to: str = "bookings") -> None:
         self._show_protected("receipt",
@@ -109,11 +114,33 @@ class App:
         self.show_login(message=message)
 
     def on_user_updated(self, user: User) -> None:
-        """Refresh session and header after the signed-in user's details change."""
+        """Refresh session and sidebar after the signed-in user's details change."""
         self.session.update_user(user)
-        self._render_header()
+        self._render_sidebar()
+
+    def toast(self, message: str, *, error: bool = False) -> None:
+        """Show a brief notification in the bottom-right corner that dismisses itself."""
+        self._dismiss_toast()
+        toast = ttk.Frame(self.root, style="Toast.TFrame")
+        ttk.Frame(toast, style="Danger.TFrame" if error else "Accent.TFrame", width=4).pack(
+            side="left", fill="y")
+        ttk.Label(toast, text=message, style="ToastError.TLabel" if error else "Toast.TLabel",
+                  wraplength=380, justify="left").pack(side="left", padx=styles.SPACE_MD,
+                                                        pady=styles.SPACE_MD - 4)
+        toast.place(relx=1.0, rely=1.0, x=-styles.SPACE_LG, y=-styles.SPACE_LG, anchor="se")
+        toast.lift()
+        self._toast = toast
+        self._toast_timer = self.root.after(TOAST_MILLISECONDS, self._dismiss_toast)
 
     # --- Internals ------------------------------------------------------------
+
+    def _dismiss_toast(self) -> None:
+        if self._toast_timer is not None:
+            self.root.after_cancel(self._toast_timer)
+            self._toast_timer = None
+        if self._toast is not None:
+            self._toast.destroy()
+            self._toast = None
 
     def _on_callback_error(self, exc_type, exc, tb) -> None:
         logger.error("Unhandled error on screen %r", self._current, exc_info=(exc_type, exc, tb))
@@ -140,56 +167,53 @@ class App:
         if self._screen is not None:
             self._screen.destroy()
         self._current = name
-        self._render_header()
+        self._render_sidebar()
         self._screen = build(self._content)
         self._screen.pack(fill="both", expand=True)
 
-    def _render_header(self) -> None:
-        for child in self._header.winfo_children():
+    def _render_sidebar(self) -> None:
+        for child in self._sidebar.winfo_children():
             child.destroy()
-        bar = ttk.Frame(self._header, style="Surface.TFrame",
-                        padding=(styles.SPACE_LG, styles.SPACE_MD))
-        bar.pack(fill="x")
-
-        brand = ttk.Frame(bar, style="Surface.TFrame")
-        brand.pack(side="left")
-        ttk.Label(brand, text="CINE", style="Brand.TLabel").pack(side="left")
-        ttk.Label(brand, text="ROJO", style="BrandAccent.TLabel").pack(side="left")
-
+        self.nav_items = {}
         user = self.session.user
         if user is None:
+            self._sidebar.pack_forget()
+            self._divider.pack_forget()
             return
+        if not self._sidebar.winfo_ismapped():
+            self._sidebar.pack(side="left", fill="y", before=self._content)
+            self._divider.pack(side="left", fill="y", before=self._content)
 
-        account = ttk.Frame(bar, style="Surface.TFrame")
-        account.pack(side="right", padx=(styles.SPACE_LG, 0))
-        ttk.Label(account, text=f"Signed in as {truncate(user.full_name, HEADER_NAME_LIMIT)}",
-                  style="HeaderUser.TLabel").pack(
-            side="left", padx=(0, styles.SPACE_MD)
-        )
-        ttk.Button(account, text="Log out", style="Header.TButton",
-                   command=self.logout, cursor="hand2").pack(side="left")
+        header = ttk.Frame(self._sidebar, style="Surface.TFrame", padding=(styles.SPACE_LG, 28))
+        header.pack(fill="x")
+        brand.logo(header, background=styles.BG_SURFACE, foreground=styles.TEXT_PRIMARY).pack(
+            side="left")
 
-        nav = ttk.Frame(bar, style="Surface.TFrame")
-        nav.pack(side="right")
-        self._nav_link(nav, "Home", ("home",), self.show_home)
-        self._nav_link(nav, "Movies", MOVIE_SCREENS, self.show_movies)
-        self._nav_link(nav, "My Bookings", BOOKING_SCREENS, self.show_bookings)
-        self._nav_link(nav, "My Profile", ("profile",), self.show_profile)
+        ttk.Label(self._sidebar, text="MENU", style="SideEyebrow.TLabel").pack(
+            anchor="w", padx=styles.SPACE_LG, pady=(0, styles.SPACE_SM))
+        for icon, text, screens, command in (
+            (styles.ICON_HOME, "Home", ("home",), self.show_home),
+            (styles.ICON_MOVIES, "Movies", MOVIE_SCREENS, self.show_movies),
+            (styles.ICON_BOOKINGS, "My Bookings", BOOKING_SCREENS, self.show_bookings),
+            (styles.ICON_PROFILE, "Profile", ("profile",), self.show_profile),
+        ):
+            item = NavItem(self._sidebar, icon, text, command, active=self._current in screens)
+            item.pack(fill="x", padx=styles.SPACE_SM, pady=1)
+            self.nav_items[text] = item
 
-    def _nav_link(self, parent: ttk.Frame, text: str, screens: tuple[str, ...],
-                  command: Callable[[], None]) -> None:
-        if self._current in screens:
-            widget: ttk.Widget = ttk.Label(parent, text=text, style="NavCurrent.TLabel")
-        else:
-            widget = ttk.Button(parent, text=text, style="NavLink.TButton", command=command,
-                                cursor="hand2")
-        widget.pack(side="left", padx=(styles.SPACE_MD, 0))
+        footer = ttk.Frame(self._sidebar, style="Surface.TFrame", padding=(styles.SPACE_SM, 0))
+        footer.pack(side="bottom", fill="x", pady=(0, styles.SPACE_LG))
+        logout = NavItem(footer, styles.ICON_LOGOUT, "Log out", self.logout)
+        logout.pack(fill="x", side="bottom")
+        self.nav_items["Log out"] = logout
 
-    def _build_footer(self) -> None:
-        footer = ttk.Frame(self.root, style="Surface.TFrame",
-                           padding=(styles.SPACE_LG, styles.SPACE_SM))
-        footer.pack(fill="x", side="bottom")
-        ttk.Label(footer, text=f"© {styles.APP_NAME} · Sample data is fictional",
-                  style="Footer.TLabel").pack(side="left")
-        ttk.Label(footer, text="Offline · Data stored on this computer",
-                  style="Footer.TLabel").pack(side="right")
+        account = ttk.Frame(footer, style="Surface.TFrame", padding=(styles.SPACE_MD, styles.SPACE_MD))
+        account.pack(fill="x", side="bottom")
+        ttk.Label(account, text=initials(user.full_name), style="Avatar.TLabel").pack(side="left")
+        names = ttk.Frame(account, style="Surface.TFrame")
+        names.pack(side="left", padx=(styles.SPACE_SM + 4, 0))
+        ttk.Label(names, text=truncate(user.full_name, SIDEBAR_NAME_LIMIT), style="SideUser.TLabel").pack(anchor="w")
+        ttk.Label(names, text=f"@{truncate(user.username, SIDEBAR_NAME_LIMIT - 1)}",
+                  style="SideMeta.TLabel").pack(anchor="w")
+        ttk.Frame(footer, style="Divider.TFrame", height=1).pack(fill="x", side="bottom",
+                                                                  padx=styles.SPACE_SM)

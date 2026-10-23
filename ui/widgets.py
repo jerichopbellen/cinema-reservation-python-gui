@@ -24,6 +24,18 @@ UNEXPECTED_ERROR_MESSAGE = "An unexpected error occurred. Please try again."
 EXPECTED_ERRORS: tuple[type[Exception], ...] = (UserFacingError, sqlite3.Error)
 
 
+def wrap_to_container(label: ttk.Label, container: tk.Misc | None = None, margin: int = 0) -> None:
+    """Keep ``label`` wrapped to its container's current width instead of a fixed pixel width."""
+    container = container or label.master
+
+    def on_resize(event: tk.Event) -> None:
+        width = event.width - margin
+        if width > 40:
+            label.configure(wraplength=width)
+
+    container.bind("<Configure>", on_resize, add="+")
+
+
 def run_in_background(widget: tk.Misc, task: Callable[[], Any],
                       on_success: Callable[[Any], None],
                       on_error: Callable[[Exception], None]) -> None:
@@ -84,6 +96,7 @@ class FormField(ttk.Frame):
         # The message line is only packed while it has text, so fields without hints stay compact.
         self._message = ttk.Label(self, style="PanelHint.TLabel", wraplength=wraplength,
                                   justify="left")
+        wrap_to_container(self._message, self)
         self.clear_error()
 
     def get(self) -> str:
@@ -187,15 +200,18 @@ def panel(master: tk.Misc, title: str, subtitle: str = "", wraplength: int = 340
 
 def screen_title(master: tk.Misc, title: str, back_text: str = "",
                  back_command: Callable[[], None] | None = None, *,
-                 subtitle: str = "") -> ttk.Frame:
-    """The standard screen header: large title, optional muted subtitle, and back link."""
+                 subtitle: str = "", eyebrow: str = "") -> ttk.Frame:
+    """The standard screen header: back link, small mono eyebrow, large title, muted subtitle."""
     header = ttk.Frame(master, style="App.TFrame")
     if back_command is not None:
         ttk.Button(header, text=back_text, style="AppLink.TButton", cursor="hand2",
-                   command=back_command).pack(side="right", anchor="n", pady=(styles.SPACE_SM, 0))
-    ttk.Label(header, text=title, style="Display.TLabel", wraplength=760, justify="left").pack(anchor="w")
+                   command=back_command).pack(anchor="w", pady=(0, styles.SPACE_MD))
+    if eyebrow:
+        ttk.Label(header, text=eyebrow.upper(), style="Eyebrow.TLabel").pack(anchor="w")
+    ttk.Label(header, text=title, style="Display.TLabel", wraplength=820, justify="left").pack(anchor="w")
     if subtitle:
-        ttk.Label(header, text=subtitle, style="Meta.TLabel", wraplength=760, justify="left").pack(anchor="w")
+        ttk.Label(header, text=subtitle, style="Meta.TLabel", wraplength=820, justify="left").pack(
+            anchor="w", pady=(2, 0))
     return header
 
 
@@ -256,3 +272,50 @@ class ScrollFrame(ttk.Frame):
     def destroy(self) -> None:
         self.unbind_all("<MouseWheel>")
         super().destroy()
+
+
+class NavItem(tk.Frame):
+    """A sidebar row: icon glyph and label, with hover and an acid marker when active.
+
+    Built from plain tk widgets because ttk cannot mix two fonts in one button.
+    It is keyboard-focusable and activates with Return or Space like a button.
+    """
+
+    def __init__(self, master: tk.Misc, icon: str, text: str, command: Callable[[], None], *,
+                 active: bool = False) -> None:
+        self._idle_bg = styles.BG_SURFACE_ALT if active else styles.BG_SURFACE
+        super().__init__(master, background=self._idle_bg, cursor="hand2", takefocus=1,
+                         highlightthickness=1, highlightbackground=self._idle_bg,
+                         highlightcolor=styles.ACCENT)
+        self.text = text
+        self._command = command
+        self._active = active
+        self._marker = tk.Frame(self, width=3, background=styles.ACCENT if active else self._idle_bg)
+        self._marker.pack(side="left", fill="y")
+        self._icon = tk.Label(self, text=icon, font=styles.FONT_ICON, background=self._idle_bg,
+                              foreground=styles.ACCENT if active else styles.TEXT_MUTED)
+        self._icon.pack(side="left", padx=(styles.SPACE_MD - 3, styles.SPACE_SM), pady=10)
+        self._label = tk.Label(self, text=text, font=styles.FONT_NAV, background=self._idle_bg,
+                               foreground=styles.TEXT_PRIMARY if active else styles.TEXT_MUTED)
+        self._label.pack(side="left", pady=10)
+        for widget in (self, self._icon, self._label):
+            widget.bind("<Button-1>", lambda _e: self.invoke())
+            widget.bind("<Enter>", lambda _e: self._hover(True))
+            widget.bind("<Leave>", lambda _e: self._hover(False))
+        self.bind("<Return>", lambda _e: self.invoke())
+        self.bind("<space>", lambda _e: self.invoke())
+
+    def invoke(self) -> None:
+        self._command()
+
+    def _hover(self, inside: bool) -> None:
+        try:
+            background = styles.BG_SURFACE_ALT if inside else self._idle_bg
+            for widget in (self, self._icon, self._label):
+                widget.configure(background=background)
+            self._label.configure(foreground=styles.TEXT_PRIMARY if inside or self._active
+                                  else styles.TEXT_MUTED)
+            if not self._active:
+                self._marker.configure(background=background)
+        except tk.TclError:
+            pass  # the item was destroyed by the navigation it triggered

@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from ui.app import App
 
 AISLE_AFTER_SEAT = 5
+SUMMARY_MIN_WIDTH = 240
 
 
 class SeatingView(ttk.Frame):
@@ -63,8 +64,9 @@ class SeatingView(ttk.Frame):
 
         screen_title(
             self, "Select your seats", "← Back to showtimes", lambda: app.show_showtimes(movie.id),
-            subtitle=f"{movie.title}  ·  {format_showtime(showtime.starts_at)}  ·  {showtime.auditorium}",
-        ).pack(fill="x", pady=(0, styles.SPACE_MD))
+            eyebrow=movie.title,
+            subtitle=f"{format_showtime(showtime.starts_at)}  ·  {showtime.auditorium}",
+        ).pack(fill="x", pady=(0, styles.SPACE_LG))
 
         body = ttk.Frame(self, style="App.TFrame")
         body.pack(fill="both", expand=True)
@@ -86,9 +88,9 @@ class SeatingView(ttk.Frame):
         hall = ttk.Frame(parent, style="App.TFrame")
         hall.pack(anchor="n")
 
-        ttk.Label(hall, text="SCREEN", style="Screen.TLabel", anchor="center").pack(fill="x", padx=28)
-        ttk.Frame(hall, style="Accent.TFrame", height=3).pack(fill="x", padx=28,
-                                                              pady=(0, styles.SPACE_MD))
+        tk.Frame(hall, background=styles.PAPER, height=3).pack(fill="x", padx=28)
+        ttk.Label(hall, text="S C R E E N", style="Screen.TLabel", anchor="center").pack(
+            fill="x", padx=28, pady=(0, styles.SPACE_MD))
 
         grid = ttk.Frame(hall, style="App.TFrame")
         grid.pack()
@@ -98,7 +100,7 @@ class SeatingView(ttk.Frame):
                 seat = Seat(row, number)
                 button = tk.Button(
                     grid, text=seat.label, width=4, font=styles.FONT_SEAT, relief="flat",
-                    borderwidth=0, highlightthickness=0, cursor="hand2",
+                    borderwidth=0, highlightthickness=1, cursor="hand2",
                     command=lambda s=seat: self._on_seat_click(s),
                 )
                 aisle = styles.SPACE_LG if number == AISLE_AFTER_SEAT + 1 else 0
@@ -109,29 +111,28 @@ class SeatingView(ttk.Frame):
 
         legend = ttk.Frame(hall, style="App.TFrame")
         legend.pack(pady=(styles.SPACE_MD, 0))
-        for text, color in (("Available", styles.SEAT_AVAILABLE),
-                            ("Selected", styles.SEAT_SELECTED),
-                            ("Booked", styles.SEAT_BOOKED)):
-            tk.Frame(legend, width=16, height=16, background=color,
-                     highlightthickness=1, highlightbackground=styles.BORDER).pack(side="left")
+        for text, color, outline in (("available", styles.SEAT_AVAILABLE, styles.SEAT_AVAILABLE),
+                                     ("selected", styles.SEAT_SELECTED, styles.SEAT_SELECTED),
+                                     ("booked", styles.SEAT_BOOKED, styles.BORDER_STRONG)):
+            tk.Frame(legend, width=14, height=14, background=color,
+                     highlightthickness=1, highlightbackground=outline).pack(side="left")
             ttk.Label(legend, text=text, style="Legend.TLabel").pack(
                 side="left", padx=(styles.SPACE_XS, styles.SPACE_LG))
 
     def _build_summary(self, parent: ttk.Frame) -> ttk.Frame:
-        card = ttk.Frame(parent, style="Panel.TFrame", padding=styles.SPACE_MD)
-        ttk.Label(card, text="Your selection", style="PanelHeading.TLabel").pack(anchor="w")
-
-        ttk.Label(card, text="Seats", style="PanelHint.TLabel").pack(anchor="w", pady=(styles.SPACE_SM, 0))
-        self.seats_label = ttk.Label(card, style="PanelValue.TLabel", wraplength=250, justify="left")
-        self.seats_label.pack(anchor="w")
+        card = ttk.Frame(parent, style="Panel.TFrame", padding=styles.SPACE_LG)
+        ttk.Frame(card, style="Panel.TFrame", width=SUMMARY_MIN_WIDTH, height=0).pack()
+        ttk.Label(card, text="YOUR SELECTION", style="PanelEyebrow.TLabel").pack(anchor="w")
+        self.seats_label = ttk.Label(card, style="PanelValue.TLabel", wraplength=240, justify="left")
+        self.seats_label.pack(anchor="w", pady=(styles.SPACE_XS, 0))
 
         rows = ttk.Frame(card, style="Panel.TFrame")
-        rows.pack(fill="x", pady=(styles.SPACE_SM, 0))
+        rows.pack(fill="x", pady=(styles.SPACE_MD, 0))
         rows.columnconfigure(1, weight=1)
         self.count_label = self._summary_row(rows, 0, "Tickets")
         self.price_label = self._summary_row(rows, 1, "Price per ticket")
 
-        ttk.Frame(card, style="Divider.TFrame", height=1).pack(fill="x", pady=styles.SPACE_SM)
+        ttk.Frame(card, style="Divider.TFrame", height=1).pack(fill="x", pady=styles.SPACE_MD)
         total_row = ttk.Frame(card, style="Panel.TFrame")
         total_row.pack(fill="x")
         ttk.Label(total_row, text="Total", style="PanelField.TLabel").pack(side="left")
@@ -143,13 +144,14 @@ class SeatingView(ttk.Frame):
         ttk.Button(card, text="Clear Selection", style="Secondary.TButton", cursor="hand2",
                    command=self._on_clear).pack(fill="x", pady=(styles.SPACE_SM, 0))
 
-        self.status = StatusMessage(card, wraplength=250)
+        self.status = StatusMessage(card, wraplength=240)
         self.status.pack(anchor="w", fill="x", pady=(styles.SPACE_SM, 0))
         return card
 
     @staticmethod
     def _summary_row(parent: ttk.Frame, row: int, label: str) -> ttk.Label:
-        ttk.Label(parent, text=label, style="PanelBody.TLabel").grid(row=row, column=0, sticky="w")
+        ttk.Label(parent, text=label, style="PanelBody.TLabel").grid(
+            row=row, column=0, sticky="w", padx=(0, styles.SPACE_MD))
         value = ttk.Label(parent, style="PanelField.TLabel")
         value.grid(row=row, column=1, sticky="e")
         return value
@@ -159,18 +161,22 @@ class SeatingView(ttk.Frame):
     def _paint(self, seat: Seat) -> None:
         button = self._buttons[seat]
         if seat in self.booked:
+            # Outlined and empty: reads as unavailable without relying on color alone.
             button.configure(state="disabled", background=styles.SEAT_BOOKED,
-                             disabledforeground=styles.SEAT_BOOKED_TEXT, cursor="arrow")
+                             disabledforeground=styles.SEAT_BOOKED_TEXT, cursor="arrow",
+                             highlightbackground=styles.BORDER_STRONG)
         elif self.selection.is_selected(seat):
             button.configure(state="normal", background=styles.SEAT_SELECTED,
-                             foreground=styles.TEXT_PRIMARY,
+                             foreground=styles.ON_ACCENT,
                              activebackground=styles.SEAT_SELECTED_HOVER,
-                             activeforeground=styles.TEXT_PRIMARY, cursor="hand2")
+                             activeforeground=styles.ON_ACCENT, cursor="hand2",
+                             highlightbackground=styles.SEAT_SELECTED)
         else:
             button.configure(state="normal", background=styles.SEAT_AVAILABLE,
                              foreground=styles.TEXT_PRIMARY,
                              activebackground=styles.SEAT_AVAILABLE_HOVER,
-                             activeforeground=styles.TEXT_PRIMARY, cursor="hand2")
+                             activeforeground=styles.TEXT_PRIMARY, cursor="hand2",
+                             highlightbackground=styles.SEAT_AVAILABLE)
 
     def _refresh(self) -> None:
         """Repaint every seat and the price summary from the current state."""

@@ -14,6 +14,11 @@ if TYPE_CHECKING:
     from ui.app import App
 
 
+def initials(full_name: str) -> str:
+    parts = full_name.split()
+    return "".join(part[0] for part in parts[:2]).upper() or "?"
+
+
 def _action_row(card: ttk.Frame, text: str) -> tuple[ttk.Button, StatusMessage]:
     """A submit button with its status message alongside, to save vertical space."""
     row = ttk.Frame(card, style="Panel.TFrame")
@@ -27,12 +32,12 @@ def _action_row(card: ttk.Frame, text: str) -> tuple[ttk.Button, StatusMessage]:
 
 class ProfileView(ttk.Frame):
     def __init__(self, master: ttk.Frame, app: App, user: User) -> None:
-        super().__init__(master, style="App.TFrame", padding=(styles.SPACE_XL, styles.SPACE_MD))
+        super().__init__(master, style="App.TFrame", padding=(styles.SPACE_XL, styles.SPACE_XL - 8))
         self.app = app
         self.user_id = user.id
 
-        screen_title(self, "My Profile", "← Back to home", app.show_home).pack(
-            fill="x", pady=(0, styles.SPACE_MD))
+        screen_title(self, "Profile", eyebrow="Account",
+                     subtitle="Manage your name and password.").pack(fill="x", pady=(0, styles.SPACE_LG))
 
         columns = ttk.Frame(self, style="App.TFrame")
         columns.pack(fill="x")
@@ -46,14 +51,18 @@ class ProfileView(ttk.Frame):
     def _build_details(self, parent: ttk.Frame, user: User) -> ttk.Frame:
         card = panel(parent, "Account details")
 
-        ttk.Label(card, text="Username", style="PanelHint.TLabel").pack(
-            anchor="w", pady=(styles.SPACE_MD, 0))
-        ttk.Label(card, text=user.username, style="PanelValue.TLabel").pack(anchor="w")
-        ttk.Label(card, text="Usernames cannot be changed.", style="PanelHint.TLabel").pack(anchor="w")
-
-        ttk.Label(card, text="Member since", style="PanelHint.TLabel").pack(
+        identity = ttk.Frame(card, style="Panel.TFrame")
+        identity.pack(fill="x", pady=(styles.SPACE_MD, 0))
+        self.avatar = ttk.Label(identity, text=initials(user.full_name), style="Avatar.TLabel",
+                                font=(styles.FONT_DISPLAY[0], 16, "bold"), width=4, padding=(0, 12))
+        self.avatar.pack(side="left")
+        names = ttk.Frame(identity, style="Panel.TFrame")
+        names.pack(side="left", padx=(styles.SPACE_MD, 0))
+        ttk.Label(names, text=f"@{user.username}", style="PanelValue.TLabel").pack(anchor="w")
+        ttk.Label(names, text=f"MEMBER SINCE {format_local_date(user.created_at).upper()}",
+                  style="PanelEyebrow.TLabel").pack(anchor="w")
+        ttk.Label(card, text="Usernames cannot be changed.", style="PanelHint.TLabel").pack(
             anchor="w", pady=(styles.SPACE_SM, 0))
-        ttk.Label(card, text=format_local_date(user.created_at), style="PanelField.TLabel").pack(anchor="w")
 
         name_field = FormField(card, "Full name", wraplength=460)
         name_field.set(user.full_name)
@@ -80,8 +89,9 @@ class ProfileView(ttk.Frame):
     def _on_details_saved(self, user: User) -> None:
         self.details_form.end()
         self.details_form.fields["full_name"].set(user.full_name)
-        self.details_form.status.success("Your name has been updated.")
+        self.avatar.configure(text=initials(user.full_name))
         self.app.on_user_updated(user)
+        self.app.toast("Your name has been updated.")
 
     def _on_details_error(self, exc: Exception) -> None:
         if isinstance(exc, UserNotFoundError):
@@ -128,7 +138,7 @@ class ProfileView(ttk.Frame):
         self.password_form.end()
         for field in self.password_form.fields.values():
             field.clear()
-        self.password_form.status.success("Your password has been changed.")
+        self.app.toast("Your password has been changed.")
 
     def _on_password_error(self, exc: Exception) -> None:
         if isinstance(exc, UserNotFoundError):

@@ -1,10 +1,10 @@
-"""CineRojo application entry point.
+"""Cinemalaya application entry point.
 
 Run with ``python main.py`` from any working directory. Python places this
 file's folder on ``sys.path``, and the database location is resolved relative
 to the project, so the current directory does not matter.
 
-Log messages go to the console and to ``data/cinerojo.log``. No passwords,
+Log messages go to the console and to ``data/cinemalaya.log``. No passwords,
 hashes, or salts are ever logged.
 """
 
@@ -22,12 +22,12 @@ from database import initialize_database
 from database.connection import DATA_DIR
 from services.auth_service import AuthService
 from services.session import Session
-from ui import styles
+from ui import brand, styles
 from ui.app import App
 
-logger = logging.getLogger("cinerojo")
+logger = logging.getLogger("cinemalaya")
 
-LOG_FILE = DATA_DIR / "cinerojo.log"
+LOG_FILE = DATA_DIR / "cinemalaya.log"
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 
@@ -55,6 +55,24 @@ def enable_windows_dpi_awareness() -> None:
         logger.debug("Could not enable DPI awareness: %s", exc)
 
 
+def use_dark_title_bar(root: tk.Tk) -> None:
+    """Ask Windows 10/11 to draw a dark title bar to match the theme. No-op elsewhere."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        root.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
+        enabled = ctypes.c_int(1)
+        for attribute in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE (new id, then pre-20H1 id)
+            if ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd, attribute, ctypes.byref(enabled), ctypes.sizeof(enabled)) == 0:
+                return
+    except (AttributeError, OSError) as exc:
+        logger.debug("Could not enable the dark title bar: %s", exc)
+
+
 def build_app(db_path: Path) -> App:
     """Create the themed root window and show the login screen."""
     root = tk.Tk()
@@ -62,6 +80,9 @@ def build_app(db_path: Path) -> App:
     root.minsize(*styles.WINDOW_MIN_SIZE)
     styles.center_window(root, *styles.WINDOW_SIZE)
     styles.apply_theme(root)
+    use_dark_title_bar(root)
+    root.app_icon = brand.app_icon(root)  # keep a reference so Tk does not discard it
+    root.iconphoto(True, root.app_icon)
 
     app = App(root, AuthService(db_path), Session(), db_path)
     app.show_login()

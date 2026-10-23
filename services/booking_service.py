@@ -38,7 +38,7 @@ DISPLAY_UPCOMING = "Upcoming"
 DISPLAY_COMPLETED = "Completed"
 DISPLAY_CANCELED = "Canceled"
 
-REFERENCE_PREFIX = "CR"
+REFERENCE_PREFIX = "CM"  # Cinemalaya; older bookings may carry "CR-"
 # Crockford-style alphabet without look-alike characters (0/O, 1/I/L).
 REFERENCE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
 REFERENCE_LENGTH = 10   # 31**10 ≈ 8 × 10^14 possible references
@@ -121,7 +121,7 @@ class BookingDetails:
 
 
 def generate_booking_reference() -> str:
-    """Return a random reference such as ``CR-7KQ2MX9TPA``."""
+    """Return a random reference such as ``CM-7KQ2MX9TPA``."""
     body = "".join(secrets.choice(REFERENCE_ALPHABET) for _ in range(REFERENCE_LENGTH))
     return f"{REFERENCE_PREFIX}-{body}"
 
