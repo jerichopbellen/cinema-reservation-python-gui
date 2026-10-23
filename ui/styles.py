@@ -29,6 +29,14 @@ TEXT_SUCCESS = "#4ade80"
 TEXT_ERROR = "#f87171"
 TEXT_DISABLED = "#5c5c64"
 
+# Seat states (tk.Button colors; ttk buttons cannot be recolored per widget easily)
+SEAT_AVAILABLE = "#4a4a52"
+SEAT_AVAILABLE_HOVER = "#62626c"
+SEAT_SELECTED = ACCENT
+SEAT_SELECTED_HOVER = ACCENT_DARK
+SEAT_BOOKED = "#2a2a2e"
+SEAT_BOOKED_TEXT = "#55555c"
+
 # Typography (Segoe UI ships with Windows; Tk falls back gracefully elsewhere)
 FONT_FAMILY = "Segoe UI"
 FONT_BRAND = (FONT_FAMILY, 20, "bold")
@@ -37,6 +45,7 @@ FONT_HEADING = (FONT_FAMILY, 14, "bold")
 FONT_BODY = (FONT_FAMILY, 11)
 FONT_SMALL = (FONT_FAMILY, 9)
 FONT_NAV = (FONT_FAMILY, 11, "bold")
+FONT_SEAT = (FONT_FAMILY, 9, "bold")
 
 # Spacing scale (pixels)
 SPACE_XS = 4
@@ -137,6 +146,29 @@ def apply_theme(root: tk.Tk) -> ttk.Style:
                     darkcolor=BG_SURFACE, focusthickness=0, padding=(SPACE_MD, SPACE_XS))
     style.map("Header.TButton", background=[("active", ACCENT_DARK)],
               bordercolor=[("active", ACCENT_DARK)])
+
+    # Catalog, showtimes, and seating
+    style.configure("Heading.TLabel", background=BG_APP, foreground=TEXT_PRIMARY, font=FONT_HEADING)
+    style.configure("Meta.TLabel", background=BG_APP, foreground=TEXT_MUTED, font=FONT_BODY)
+    style.configure("Price.TLabel", background=BG_APP, foreground=ACCENT, font=FONT_HEADING)
+    style.configure("PanelPrice.TLabel", background=BG_SURFACE_ALT, foreground=ACCENT,
+                    font=FONT_HEADING)
+    style.configure("PanelTotal.TLabel", background=BG_SURFACE_ALT, foreground=TEXT_PRIMARY,
+                    font=(FONT_FAMILY, 20, "bold"))
+    style.configure("PanelBadge.TLabel", background=BORDER, foreground=TEXT_PRIMARY,
+                    font=FONT_SMALL, padding=(SPACE_SM, 2))
+    style.configure("Screen.TLabel", background=BORDER, foreground=TEXT_MUTED,
+                    font=(FONT_FAMILY, 9, "bold"), anchor="center", padding=(0, SPACE_XS))
+    style.configure("RowLabel.TLabel", background=BG_APP, foreground=TEXT_FAINT, font=FONT_SEAT,
+                    anchor="center")
+    style.configure("Legend.TLabel", background=BG_APP, foreground=TEXT_MUTED, font=FONT_SMALL)
+    style.configure("Divider.TFrame", background=BORDER)
+    style.configure(
+        "Vertical.TScrollbar", background=BG_SURFACE_ALT, troughcolor=BG_APP,
+        bordercolor=BG_APP, lightcolor=BG_SURFACE_ALT, darkcolor=BG_SURFACE_ALT,
+        arrowcolor=TEXT_MUTED,
+    )
+    style.map("Vertical.TScrollbar", background=[("active", BORDER)])
     return style
 
 

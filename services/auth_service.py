@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from database.connection import get_connection
+from services.errors import UserFacingError
 
 HASH_ALGORITHM = "pbkdf2_sha256"
 PBKDF2_ITERATIONS = 600_000
@@ -35,8 +36,8 @@ PASSWORD_RULES = f"At least {PASSWORD_MIN_LENGTH} characters, including at least
 INVALID_CREDENTIALS_MESSAGE = "Incorrect username or password."
 
 
-class AuthError(Exception):
-    """Base class for errors whose message is safe to show to the user."""
+class AuthError(UserFacingError):
+    """Base class for authentication and profile errors."""
 
 
 class ValidationError(AuthError):

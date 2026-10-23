@@ -3,11 +3,16 @@
 Only the public :class:`~services.auth_service.User` record is kept; passwords,
 hashes, and salts never enter the session. Nothing is persisted to disk, so
 closing the application always ends the session.
+
+The session also holds the in-progress seat selection and any validated
+pending checkout. Both are cleared on login and logout, and are never written
+to the database, so they cannot survive a restart.
 """
 
 from __future__ import annotations
 
 from services.auth_service import User
+from services.seating_service import PendingCheckout, SeatSelection
 
 
 class NotAuthenticatedError(Exception):
@@ -19,6 +24,8 @@ class Session:
 
     def __init__(self) -> None:
         self._user: User | None = None
+        self.seat_selection: SeatSelection | None = None
+        self.pending_checkout: PendingCheckout | None = None
 
     @property
     def user(self) -> User | None:
@@ -33,6 +40,7 @@ class Session:
         return self._user is not None
 
     def login(self, user: User) -> None:
+        self.clear_booking_state()
         self._user = user
 
     def update_user(self, user: User) -> None:
@@ -47,4 +55,10 @@ class Session:
         return self._user
 
     def logout(self) -> None:
+        self.clear_booking_state()
         self._user = None
+
+    def clear_booking_state(self) -> None:
+        """Forget the temporary seat selection and pending checkout."""
+        self.seat_selection = None
+        self.pending_checkout = None

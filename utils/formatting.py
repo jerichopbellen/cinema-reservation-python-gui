@@ -14,6 +14,25 @@ def format_local_date(utc_timestamp: str) -> str:
     return f"{local:%B} {local.day}, {local.year}"
 
 
+def format_duration(minutes: int) -> str:
+    """Format a running time, e.g. ``118 -> '1h 58m'``."""
+    hours, mins = divmod(minutes, 60)
+    if hours and mins:
+        return f"{hours}h {mins}m"
+    return f"{hours}h" if hours else f"{mins}m"
+
+
+def format_show_date(moment: dt.date) -> str:
+    """Format a show date, e.g. ``'Sat, Oct 24, 2026'``."""
+    return f"{moment:%a, %b} {moment.day}, {moment.year}"
+
+
+def format_show_time(moment: dt.datetime | dt.time) -> str:
+    """Format a show time in 12-hour form, e.g. ``'8:15 PM'``."""
+    hour = moment.hour % 12 or 12
+    return f"{hour}:{moment.minute:02d} {'AM' if moment.hour < 12 else 'PM'}"
+
+
 def format_peso(centavos: int) -> str:
     """Format integer centavos as Philippine pesos, e.g. ``35000 -> '₱350.00'``."""
     sign = "-" if centavos < 0 else ""

@@ -16,16 +16,21 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 
 from services.auth_service import AuthService, User, UserNotFoundError
+from services.catalog_service import CatalogService
+from services.seating_service import SeatingService
 from services.session import Session
 from ui import styles
 from ui.auth_views import LoginView, RegisterView
 from ui.main_view import HomeView
+from ui.movie_views import MoviesView, ShowtimesView
 from ui.profile_view import ProfileView
+from ui.seating_view import SeatingView
 from ui.widgets import DATABASE_ERROR_MESSAGE
 
 logger = logging.getLogger(__name__)
 
-PLACEHOLDER_SECTIONS = ("Movies", "My Bookings")
+PLACEHOLDER_SECTIONS = ("My Bookings",)
+MOVIE_SCREENS = ("movies", "showtimes", "seating")
 
 
 class App:
@@ -36,6 +41,8 @@ class App:
         self.auth = auth
         self.session = session
         self.db_path = db_path
+        self.catalog = CatalogService(db_path)
+        self.seating = SeatingService(db_path, self.catalog)
 
         self._header = ttk.Frame(root, style="Surface.TFrame")
         self._header.pack(fill="x")
@@ -60,6 +67,15 @@ class App:
 
     def show_profile(self) -> None:
         self._show_protected("profile", lambda parent, user: ProfileView(parent, self, user))
+
+    def show_movies(self) -> None:
+        self._show_protected("movies", lambda parent, _user: MoviesView(parent, self))
+
+    def show_showtimes(self, movie_id: int) -> None:
+        self._show_protected("showtimes", lambda parent, _user: ShowtimesView(parent, self, movie_id))
+
+    def show_seating(self, showtime_id: int) -> None:
+        self._show_protected("seating", lambda parent, _user: SeatingView(parent, self, showtime_id))
 
     def login(self, user: User) -> None:
         self.session.login(user)
@@ -127,16 +143,18 @@ class App:
 
         nav = ttk.Frame(bar, style="Surface.TFrame")
         nav.pack(side="right")
-        self._nav_link(nav, "Home", "home", self.show_home)
+        self._nav_link(nav, "Home", ("home",), self.show_home)
+        self._nav_link(nav, "Movies", MOVIE_SCREENS, self.show_movies)
         for section in PLACEHOLDER_SECTIONS:
             item = ttk.Frame(nav, style="Surface.TFrame")
             item.pack(side="left", padx=(styles.SPACE_LG, 0))
             ttk.Label(item, text=section, style="Nav.TLabel").pack(anchor="e")
             ttk.Label(item, text="coming soon", style="NavHint.TLabel").pack(anchor="e")
-        self._nav_link(nav, "My Profile", "profile", self.show_profile)
+        self._nav_link(nav, "My Profile", ("profile",), self.show_profile)
 
-    def _nav_link(self, parent: ttk.Frame, text: str, name: str, command: Callable[[], None]) -> None:
-        if self._current == name:
+    def _nav_link(self, parent: ttk.Frame, text: str, screens: tuple[str, ...],
+                  command: Callable[[], None]) -> None:
+        if self._current in screens:
             widget: ttk.Widget = ttk.Label(parent, text=text, style="NavCurrent.TLabel")
         else:
             widget = ttk.Button(parent, text=text, style="NavLink.TButton", command=command,

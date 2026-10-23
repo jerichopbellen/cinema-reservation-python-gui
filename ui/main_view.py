@@ -1,7 +1,7 @@
 """Home screen shown after login.
 
-Movies and My Bookings are placeholders until their planned stages; the
-profile shortcut is functional.
+My Bookings is a placeholder until its planned stage; the Movies and profile
+shortcuts are functional.
 """
 
 from __future__ import annotations
@@ -50,9 +50,11 @@ class HomeView(ttk.Frame):
             card = panel(cards, title, blurb, wraplength=260)
             card.grid(row=0, column=column, sticky="nsew",
                       padx=(0 if column == 0 else styles.SPACE_MD, 0))
-            if title == "My Profile":
-                ttk.Button(card, text="Open profile", style="Accent.TButton", cursor="hand2",
-                           command=app.show_profile).pack(anchor="w", pady=(styles.SPACE_MD, 0))
+            action = {"Movies": ("Browse movies", app.show_movies),
+                      "My Profile": ("Open profile", app.show_profile)}.get(title)
+            if action is not None:
+                ttk.Button(card, text=action[0], style="Accent.TButton", cursor="hand2",
+                           command=action[1]).pack(anchor="w", pady=(styles.SPACE_MD, 0))
             else:
                 ttk.Label(card, text="Coming soon", style="PanelHint.TLabel").pack(
                     anchor="w", pady=(styles.SPACE_MD, 0)

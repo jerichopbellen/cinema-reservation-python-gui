@@ -11,7 +11,7 @@ from collections.abc import Callable
 from tkinter import ttk
 from typing import Any
 
-from services.auth_service import AuthError
+from services.errors import UserFacingError
 from ui import styles
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ def run_in_background(widget: tk.Misc, task: Callable[[], Any],
 
 def user_message_for(exc: Exception) -> str:
     """Return a safe message for the UI, logging anything that is not a user error."""
-    if isinstance(exc, AuthError):
+    if isinstance(exc, UserFacingError):
         return str(exc)
     if isinstance(exc, sqlite3.Error):
         logger.error("Database operation failed", exc_info=exc)
@@ -179,3 +179,63 @@ def panel(master: tk.Misc, title: str, subtitle: str = "", wraplength: int = 340
         ttk.Label(frame, text=subtitle, style="PanelBody.TLabel", wraplength=wraplength,
                   justify="left").pack(anchor="w", pady=(styles.SPACE_XS, 0))
     return frame
+
+
+def screen_title(master: tk.Misc, title: str, back_text: str = "",
+                 back_command: Callable[[], None] | None = None) -> ttk.Frame:
+    """A large screen title with an optional back link on the right."""
+    row = ttk.Frame(master, style="App.TFrame")
+    ttk.Label(row, text=title, style="Display.TLabel").pack(side="left")
+    if back_command is not None:
+        ttk.Button(row, text=back_text, style="AppLink.TButton", cursor="hand2",
+                   command=back_command).pack(side="right")
+    return row
+
+
+def message_panel(master: tk.Misc, title: str, message: str, *, error: bool = False) -> ttk.Frame:
+    """A panel for empty states and load failures."""
+    frame = ttk.Frame(master, style="Panel.TFrame", padding=styles.SPACE_LG)
+    ttk.Label(frame, text=title, style="PanelHeading.TLabel").pack(anchor="w")
+    ttk.Label(frame, text=message, style="PanelFailure.TLabel" if error else "PanelBody.TLabel",
+              wraplength=640, justify="left").pack(anchor="w", pady=(styles.SPACE_XS, 0))
+    return frame
+
+
+class ScrollFrame(ttk.Frame):
+    """A vertically scrollable area. Add children to :attr:`body`.
+
+    The scrollbar only appears when the content is taller than the visible area,
+    and the mouse wheel scrolls while the pointer is over the frame.
+    """
+
+    def __init__(self, master: tk.Misc) -> None:
+        super().__init__(master, style="App.TFrame")
+        self._canvas = tk.Canvas(self, background=styles.BG_APP, highlightthickness=0, borderwidth=0)
+        self._scrollbar = ttk.Scrollbar(self, orient="vertical", command=self._canvas.yview)
+        self._canvas.configure(yscrollcommand=self._scrollbar.set)
+        self._canvas.pack(side="left", fill="both", expand=True)
+
+        self.body = ttk.Frame(self._canvas, style="App.TFrame")
+        self._window = self._canvas.create_window(0, 0, window=self.body, anchor="nw")
+        self.body.bind("<Configure>", self._on_resize)
+        self._canvas.bind("<Configure>", self._on_resize)
+        self.bind("<Enter>", lambda _e: self.bind_all("<MouseWheel>", self._on_wheel))
+        self.bind("<Leave>", lambda _e: self.unbind_all("<MouseWheel>"))
+
+    def _on_resize(self, _event: tk.Event) -> None:
+        self._canvas.itemconfigure(self._window, width=self._canvas.winfo_width())
+        self._canvas.configure(scrollregion=self._canvas.bbox("all"))
+        overflowing = self.body.winfo_reqheight() > self._canvas.winfo_height()
+        if overflowing and not self._scrollbar.winfo_ismapped():
+            self._scrollbar.pack(side="right", fill="y", before=self._canvas)
+        elif not overflowing and self._scrollbar.winfo_ismapped():
+            self._scrollbar.pack_forget()
+            self._canvas.yview_moveto(0)
+
+    def _on_wheel(self, event: tk.Event) -> None:
+        if self._scrollbar.winfo_ismapped():
+            self._canvas.yview_scroll(int(-event.delta / 120), "units")
+
+    def destroy(self) -> None:
+        self.unbind_all("<MouseWheel>")
+        super().destroy()
