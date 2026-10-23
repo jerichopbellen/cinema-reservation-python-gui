@@ -78,6 +78,10 @@ class CatalogService:
         self.db_path = db_path
         self._now = now
 
+    def now(self) -> dt.datetime:
+        """The service's current local time (injectable for tests)."""
+        return self._now()
+
     def list_active_movies(self) -> list[Movie]:
         with get_connection(self.db_path) as conn:
             rows = conn.execute(
@@ -116,17 +120,22 @@ class CatalogService:
     def get_bookable_showtime(self, showtime_id: int) -> tuple[Movie, Showtime]:
         """Return the showtime and its movie, or raise :class:`ShowtimeUnavailableError`."""
         with get_connection(self.db_path) as conn:
-            row = conn.execute(
-                f"""
-                SELECT {_MOVIE_COLUMNS}, m.is_active AS movie_active,
-                       s.id AS showtime_id, s.movie_id, s.show_date, s.show_time, s.auditorium,
-                       s.is_active AS showtime_active
-                FROM showtimes s
-                JOIN movies m ON m.id = s.movie_id
-                WHERE s.id = ?
-                """,
-                (showtime_id,),
-            ).fetchone()
+            return self.load_bookable_showtime(conn, showtime_id)
+
+    def load_bookable_showtime(self, conn: sqlite3.Connection,
+                               showtime_id: int) -> tuple[Movie, Showtime]:
+        """Like :meth:`get_bookable_showtime`, but uses the caller's connection or transaction."""
+        row = conn.execute(
+            f"""
+            SELECT {_MOVIE_COLUMNS}, m.is_active AS movie_active,
+                   s.id AS showtime_id, s.movie_id, s.show_date, s.show_time, s.auditorium,
+                   s.is_active AS showtime_active
+            FROM showtimes s
+            JOIN movies m ON m.id = s.movie_id
+            WHERE s.id = ?
+            """,
+            (showtime_id,),
+        ).fetchone()
         if row is None:
             raise ShowtimeUnavailableError("This showtime could not be found.")
         if not row["showtime_active"] or not row["movie_active"]:

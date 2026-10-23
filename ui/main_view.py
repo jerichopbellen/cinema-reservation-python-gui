@@ -1,8 +1,4 @@
-"""Home screen shown after login.
-
-My Bookings is a placeholder until its planned stage; the Movies and profile
-shortcuts are functional.
-"""
+"""Home screen shown after login, with shortcuts to the main sections."""
 
 from __future__ import annotations
 
@@ -50,12 +46,10 @@ class HomeView(ttk.Frame):
             card = panel(cards, title, blurb, wraplength=260)
             card.grid(row=0, column=column, sticky="nsew",
                       padx=(0 if column == 0 else styles.SPACE_MD, 0))
-            action = {"Movies": ("Browse movies", app.show_movies),
-                      "My Profile": ("Open profile", app.show_profile)}.get(title)
-            if action is not None:
-                ttk.Button(card, text=action[0], style="Accent.TButton", cursor="hand2",
-                           command=action[1]).pack(anchor="w", pady=(styles.SPACE_MD, 0))
-            else:
-                ttk.Label(card, text="Coming soon", style="PanelHint.TLabel").pack(
-                    anchor="w", pady=(styles.SPACE_MD, 0)
-                )
+            button_text, command = {
+                "Movies": ("Browse movies", app.show_movies),
+                "My Bookings": ("View bookings", app.show_bookings),
+                "My Profile": ("Open profile", app.show_profile),
+            }[title]
+            ttk.Button(card, text=button_text, style="Accent.TButton", cursor="hand2",
+                       command=command).pack(anchor="w", pady=(styles.SPACE_MD, 0))

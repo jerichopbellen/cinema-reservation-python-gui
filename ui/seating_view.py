@@ -30,7 +30,6 @@ if TYPE_CHECKING:
     from ui.app import App
 
 AISLE_AFTER_SEAT = 5
-CHECKOUT_NEXT_STAGE_MESSAGE = "Checkout will be available in the next stage."
 
 
 class SeatingView(ttk.Frame):
@@ -212,7 +211,6 @@ class SeatingView(ttk.Frame):
     def _on_continue(self) -> None:
         try:
             checkout = self.app.seating.prepare_checkout(self.selection)
-            self.booked = self.app.seating.get_booked_seats(self.selection.showtime.id)
         except SeatsUnavailableError as exc:
             self.booked = exc.booked
             self._selection_changed()
@@ -228,7 +226,4 @@ class SeatingView(ttk.Frame):
             return
 
         self.app.session.pending_checkout = checkout
-        self._refresh()
-        verb = "is" if len(checkout.seats) == 1 else "are"
-        self.status.success(f"Your {'seat' if verb == 'is' else 'seats'} {verb} still available. "
-                            f"{CHECKOUT_NEXT_STAGE_MESSAGE}")
+        self.app.show_checkout()

@@ -16,11 +16,13 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 
 from services.auth_service import AuthService, User, UserNotFoundError
+from services.booking_service import BookingService
 from services.catalog_service import CatalogService
 from services.seating_service import SeatingService
 from services.session import Session
 from ui import styles
 from ui.auth_views import LoginView, RegisterView
+from ui.booking_views import BookingsView, CheckoutView, ConfirmationView, ReceiptView
 from ui.main_view import HomeView
 from ui.movie_views import MoviesView, ShowtimesView
 from ui.profile_view import ProfileView
@@ -29,8 +31,8 @@ from ui.widgets import DATABASE_ERROR_MESSAGE
 
 logger = logging.getLogger(__name__)
 
-PLACEHOLDER_SECTIONS = ("My Bookings",)
-MOVIE_SCREENS = ("movies", "showtimes", "seating")
+MOVIE_SCREENS = ("movies", "showtimes", "seating", "checkout", "confirmation")
+BOOKING_SCREENS = ("bookings", "receipt")
 
 
 class App:
@@ -43,6 +45,7 @@ class App:
         self.db_path = db_path
         self.catalog = CatalogService(db_path)
         self.seating = SeatingService(db_path, self.catalog)
+        self.bookings = BookingService(db_path, self.catalog)
 
         self._header = ttk.Frame(root, style="Surface.TFrame")
         self._header.pack(fill="x")
@@ -76,6 +79,20 @@ class App:
 
     def show_seating(self, showtime_id: int) -> None:
         self._show_protected("seating", lambda parent, _user: SeatingView(parent, self, showtime_id))
+
+    def show_checkout(self) -> None:
+        self._show_protected("checkout", lambda parent, user: CheckoutView(parent, self, user))
+
+    def show_confirmation(self, booking_id: int) -> None:
+        self._show_protected("confirmation",
+                             lambda parent, user: ConfirmationView(parent, self, user, booking_id))
+
+    def show_bookings(self, message: str = "") -> None:
+        self._show_protected("bookings", lambda parent, user: BookingsView(parent, self, user, message))
+
+    def show_receipt(self, booking_id: int, back_to: str = "bookings") -> None:
+        self._show_protected("receipt",
+                             lambda parent, user: ReceiptView(parent, self, user, booking_id, back_to))
 
     def login(self, user: User) -> None:
         self.session.login(user)
@@ -145,11 +162,7 @@ class App:
         nav.pack(side="right")
         self._nav_link(nav, "Home", ("home",), self.show_home)
         self._nav_link(nav, "Movies", MOVIE_SCREENS, self.show_movies)
-        for section in PLACEHOLDER_SECTIONS:
-            item = ttk.Frame(nav, style="Surface.TFrame")
-            item.pack(side="left", padx=(styles.SPACE_LG, 0))
-            ttk.Label(item, text=section, style="Nav.TLabel").pack(anchor="e")
-            ttk.Label(item, text="coming soon", style="NavHint.TLabel").pack(anchor="e")
+        self._nav_link(nav, "My Bookings", BOOKING_SCREENS, self.show_bookings)
         self._nav_link(nav, "My Profile", ("profile",), self.show_profile)
 
     def _nav_link(self, parent: ttk.Frame, text: str, screens: tuple[str, ...],

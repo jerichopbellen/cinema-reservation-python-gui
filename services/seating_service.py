@@ -9,6 +9,7 @@ writes to the database.
 from __future__ import annotations
 
 import re
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -143,6 +144,26 @@ class PendingCheckout:
     total: int
 
 
+def fetch_booked_seats(conn: sqlite3.Connection, showtime_id: int) -> frozenset[Seat]:
+    """Seats held by non-canceled, non-released bookings for a showtime."""
+    rows = conn.execute(
+        """
+        SELECT bs.seat_row, bs.seat_number
+        FROM booked_seats bs
+        JOIN bookings b ON b.id = bs.booking_id
+        WHERE bs.showtime_id = ? AND bs.is_released = 0 AND b.status <> ?
+        """,
+        (showtime_id, CANCELED_STATUS),
+    ).fetchall()
+    seats = set()
+    for row in rows:
+        try:
+            seats.add(Seat(row["seat_row"], row["seat_number"]))
+        except ValueError:
+            continue  # outside the current layout; cannot collide with a selectable seat
+    return frozenset(seats)
+
+
 class SeatingService:
     """Reads seat availability and validates selections. Never writes to the database."""
 
@@ -153,22 +174,7 @@ class SeatingService:
 
     def get_booked_seats(self, showtime_id: int) -> frozenset[Seat]:
         with get_connection(self.db_path) as conn:
-            rows = conn.execute(
-                """
-                SELECT bs.seat_row, bs.seat_number
-                FROM booked_seats bs
-                JOIN bookings b ON b.id = bs.booking_id
-                WHERE bs.showtime_id = ? AND bs.is_released = 0 AND b.status <> ?
-                """,
-                (showtime_id, CANCELED_STATUS),
-            ).fetchall()
-        seats = set()
-        for row in rows:
-            try:
-                seats.add(Seat(row["seat_row"], row["seat_number"]))
-            except ValueError:
-                continue  # outside the current layout; cannot collide with a selectable seat
-        return frozenset(seats)
+            return fetch_booked_seats(conn, showtime_id)
 
     def open_showtime(self, showtime_id: int) -> tuple[Movie, Showtime, frozenset[Seat]]:
         """Validate the showtime is bookable and load its current availability."""

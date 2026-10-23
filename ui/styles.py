@@ -9,8 +9,9 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-APP_NAME = "CineRojo"
-APP_TAGLINE = "Your seat is waiting."
+from utils.branding import APP_NAME, APP_TAGLINE
+
+__all__ = ["APP_NAME", "APP_TAGLINE", "apply_theme", "center_window"]
 WINDOW_TITLE = f"{APP_NAME} — Cinema Ticket Booking"
 WINDOW_SIZE = (1100, 700)
 WINDOW_MIN_SIZE = (900, 660)
@@ -46,6 +47,8 @@ FONT_BODY = (FONT_FAMILY, 11)
 FONT_SMALL = (FONT_FAMILY, 9)
 FONT_NAV = (FONT_FAMILY, 11, "bold")
 FONT_SEAT = (FONT_FAMILY, 9, "bold")
+FONT_MONO = ("Consolas", 11)
+FONT_REFERENCE = ("Consolas", 18, "bold")
 
 # Spacing scale (pixels)
 SPACE_XS = 4
@@ -169,6 +172,20 @@ def apply_theme(root: tk.Tk) -> ttk.Style:
         arrowcolor=TEXT_MUTED,
     )
     style.map("Vertical.TScrollbar", background=[("active", BORDER)])
+
+    # Bookings and receipts
+    style.configure("PanelReference.TLabel", background=BG_SURFACE_ALT, foreground=ACCENT,
+                    font=FONT_REFERENCE)
+    style.configure("PanelMono.TLabel", background=BG_SURFACE_ALT, foreground=ACCENT,
+                    font=(FONT_MONO[0], 11, "bold"))
+    style.configure("Success.TLabel", background=BG_APP, foreground=TEXT_SUCCESS, font=FONT_HEADING)
+    for name, background, foreground in (
+        ("BadgeUpcoming.TLabel", "#14532d", TEXT_SUCCESS),
+        ("BadgeCompleted.TLabel", BORDER, TEXT_MUTED),
+        ("BadgeCanceled.TLabel", "#4c0d0d", TEXT_ERROR),
+    ):
+        style.configure(name, background=background, foreground=foreground,
+                        font=(FONT_FAMILY, 9, "bold"), padding=(SPACE_SM, 2))
     return style
 
 
