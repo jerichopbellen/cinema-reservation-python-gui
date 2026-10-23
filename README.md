@@ -1,4 +1,4 @@
-# Cinemalaya
+# Cinema Ticket Booking System
 
 A desktop cinema ticket booking system built with Python, Tkinter, and SQLite.
 
