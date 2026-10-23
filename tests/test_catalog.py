@@ -13,9 +13,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from database.connection import DEFAULT_DB_PATH, connect, get_connection
-from database.schema import create_schema
-from database.seed import SAMPLE_MOVIES, seed_sample_data
+from database.connection import DEFAULT_DB_PATH, connect
+from database.seed import SAMPLE_MOVIES
 from services.auth_service import User
 from services.catalog_service import CatalogError, CatalogService, ShowtimeUnavailableError
 from services.seating_service import (
@@ -28,18 +27,9 @@ from services.seating_service import (
     SeatsUnavailableError,
 )
 from services.session import Session
+from tests.helpers import START_CLOCK, FakeClock, create_seeded_database
 from utils.formatting import format_duration, format_show_date, format_show_time
 
-SEED_DAY = dt.date(2030, 1, 1)          # sample showtimes run Jan 2–4, 2030
-START_CLOCK = dt.datetime(2030, 1, 2, 12, 0)
-
-
-class FakeClock:
-    def __init__(self, moment: dt.datetime) -> None:
-        self.moment = moment
-
-    def __call__(self) -> dt.datetime:
-        return self.moment
 
 
 class CatalogTestCase(unittest.TestCase):
@@ -48,9 +38,7 @@ class CatalogTestCase(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.db_path = Path(tmp.name) / "catalog.db"
         self.assertNotEqual(self.db_path.resolve(), DEFAULT_DB_PATH.resolve())
-        with get_connection(self.db_path) as conn:
-            create_schema(conn)
-            seed_sample_data(conn, today=SEED_DAY)
+        create_seeded_database(self.db_path)
 
         self.clock = FakeClock(START_CLOCK)
         self.catalog = CatalogService(self.db_path, now=self.clock)

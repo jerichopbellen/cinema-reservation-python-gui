@@ -13,10 +13,10 @@ import unittest
 from pathlib import Path
 
 from database import initialize_database
-from database.connection import DEFAULT_DB_PATH, PROJECT_ROOT, connect, get_connection
+from database.connection import DEFAULT_DB_PATH, PROJECT_ROOT, connect, get_connection, write_transaction
 from database.schema import REQUIRED_TABLES
 from database.seed import SAMPLE_MOVIES, build_sample_showtimes
-from utils.formatting import format_local_date, format_peso
+from utils.formatting import format_local_date, format_peso, format_showtime, truncate
 
 
 class DatabaseTestCase(unittest.TestCase):
@@ -138,6 +138,25 @@ class ConnectionTests(DatabaseTestCase):
                 raise RuntimeError("boom")
         price = self.conn.execute("SELECT ticket_price FROM movies WHERE id = 1").fetchone()[0]
         self.assertNotEqual(price, 1)
+
+    def test_write_transaction_enforces_foreign_keys(self) -> None:
+        with write_transaction(self.db_path) as conn:
+            self.assertEqual(conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
+        with self.assertRaises(sqlite3.IntegrityError):
+            with write_transaction(self.db_path) as conn:
+                conn.execute("INSERT INTO showtimes (movie_id, show_date, show_time, auditorium) "
+                             "VALUES (9999, '2030-01-01', '10:00', 'Cinema 1')")
+
+    def test_write_transaction_rolls_back_every_statement_on_error(self) -> None:
+        before = self.count("showtimes")
+        with self.assertRaises(RuntimeError):
+            with write_transaction(self.db_path) as conn:
+                conn.execute("INSERT INTO showtimes (movie_id, show_date, show_time, auditorium) "
+                             "VALUES (1, '2030-01-01', '10:00', 'Cinema 8')")
+                conn.execute("UPDATE movies SET ticket_price = 1 WHERE id = 1")
+                raise RuntimeError("fail after two writes")
+        self.assertEqual(self.count("showtimes"), before)
+        self.assertNotEqual(self.conn.execute("SELECT ticket_price FROM movies WHERE id = 1").fetchone()[0], 1)
 
     def test_default_path_is_resolved_from_project_not_cwd(self) -> None:
         self.assertTrue(DEFAULT_DB_PATH.is_absolute())
@@ -276,6 +295,12 @@ class FormattingTests(unittest.TestCase):
         self.assertEqual(format_peso(5), "₱0.05")
         self.assertEqual(format_peso(123456789), "₱1,234,567.89")
         self.assertEqual(format_peso(-1050), "-₱10.50")
+
+    def test_format_showtime_and_truncate(self) -> None:
+        self.assertEqual(format_showtime(dt.datetime(2030, 1, 5, 20, 15)), "Sat, Jan 5, 2030  ·  8:15 PM")
+        self.assertEqual(truncate("Maria Clara", 20), "Maria Clara")
+        self.assertEqual(truncate("Maria Clara de los Santos", 12), "Maria Clara…")
+        self.assertEqual(len(truncate("x" * 100, 28)), 28)
 
     def test_format_local_date_converts_from_utc(self) -> None:
         stamp = "2026-10-23 23:30:00"

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from services.catalog_service import Movie, Showtime
 from ui import styles
-from ui.widgets import ScrollFrame, message_panel, screen_title, user_message_for
+from ui.widgets import EXPECTED_ERRORS, ScrollFrame, message_panel, screen_title, user_message_for
 from utils.formatting import format_duration, format_peso, format_show_date, format_show_time
 
 if TYPE_CHECKING:
@@ -27,13 +27,13 @@ class MoviesView(ttk.Frame):
         super().__init__(master, style="App.TFrame", padding=(styles.SPACE_XL, styles.SPACE_MD))
         self.app = app
 
-        screen_title(self, "Now Showing", "← Back to home", app.show_home).pack(fill="x")
-        ttk.Label(self, text="Choose a movie to see its upcoming showtimes.",
-                  style="Meta.TLabel").pack(anchor="w", pady=(0, styles.SPACE_MD))
+        screen_title(self, "Now Showing", "← Back to home", app.show_home,
+                     subtitle="Choose a movie to see its upcoming showtimes.").pack(
+            fill="x", pady=(0, styles.SPACE_MD))
 
         try:
             movies = app.catalog.list_active_movies()
-        except Exception as exc:
+        except EXPECTED_ERRORS as exc:
             message_panel(self, "Movies could not be loaded", user_message_for(exc),
                           error=True).pack(fill="x")
             return
@@ -85,11 +85,15 @@ class ShowtimesView(ttk.Frame):
         try:
             movie = app.catalog.get_active_movie(movie_id)
             showtimes = app.catalog.list_upcoming_showtimes(movie_id)
-        except Exception as exc:
+        except EXPECTED_ERRORS as exc:
             screen_title(self, "Showtimes", "← Back to movies", app.show_movies).pack(fill="x")
             message_panel(self, "Showtimes could not be loaded", user_message_for(exc),
                           error=True).pack(fill="x", pady=(styles.SPACE_MD, 0))
             return
+
+        selection = app.session.seat_selection
+        if selection is not None and selection.movie.id != movie.id:
+            app.session.clear_booking_state()  # seats picked for another movie are stale
 
         screen_title(self, movie.title, "← Back to movies", app.show_movies).pack(fill="x")
         meta = ttk.Frame(self, style="App.TFrame")
@@ -127,7 +131,7 @@ class ShowtimesView(ttk.Frame):
             (format_show_date(showtime.starts_at.date()), "PanelField.TLabel"),
             (format_show_time(showtime.starts_at), "PanelValue.TLabel"),
             (showtime.auditorium, "PanelBody.TLabel"),
-            (format_peso(movie.ticket_price), "PanelPrice.TLabel"),
+            (format_peso(movie.ticket_price), "PanelField.TLabel"),
         )
         for column, (text, style) in enumerate(cells):
             ttk.Label(row, text=text, style=style).grid(row=0, column=column, sticky="w")

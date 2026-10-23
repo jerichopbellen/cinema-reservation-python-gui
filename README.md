@@ -14,21 +14,18 @@ This project was created as a class activity for a Python elective subject.
 
 ## Features
 
-- Cinema-themed desktop interface
-- User registration and login
-- Secure password storage (PBKDF2-SHA256 with a random salt per user)
-- Profile management: edit your full name and change your password
-- Movie browsing with genre, running time, rating, and ticket price
-- Showtime selection from upcoming screenings
-- Interactive seat selection with live availability (rows A–H, seats 1–10)
-- Live ticket price calculation as seats are selected
-- Ticket checkout and confirmation, with seats protected against double booking
-- Unique booking references
-- Receipt generation and saving (saved to `receipts/` by default)
-- Booking history showing upcoming, completed, and canceled bookings
+- User registration, login, and logout with salted PBKDF2 password hashing
+- Profile editing and password changes
+- Movie catalog with genre, running time, age rating, and ticket price
+- Upcoming showtime selection
+- Interactive seat map (rows A–H, seats 1–10) showing available, selected, and booked seats
+- Live ticket totals as seats are selected
+- Checkout with database-enforced protection against double booking
+- Unique booking references and booking confirmation
+- Text receipts that can be viewed and saved to a file
+- Booking history with upcoming, completed, and canceled bookings
 - Booking cancellation that releases seats for others
-- Sample movies and showtimes
-- SQLite database for storing application data
+- Local SQLite storage with fictional sample movies and showtimes
 
 ## Getting Started
 
@@ -78,11 +75,12 @@ cinema/
 │   ├── branding.py
 │   └── formatting.py
 ├── tests/
+│   ├── helpers.py
 │   ├── test_auth.py
 │   ├── test_booking.py
 │   ├── test_catalog.py
 │   └── test_database.py
 ├── assets/
 ├── receipts/
-└── data/
+└── data/       
 ```

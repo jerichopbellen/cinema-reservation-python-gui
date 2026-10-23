@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 DATABASE_ERROR_MESSAGE = "Something went wrong while accessing the database. Please try again."
 UNEXPECTED_ERROR_MESSAGE = "An unexpected error occurred. Please try again."
 
+# Failures a screen can explain to the user. Anything else is a programming
+# defect and is left to propagate to the Tk error handler installed by App.
+EXPECTED_ERRORS: tuple[type[Exception], ...] = (UserFacingError, sqlite3.Error)
+
 
 def run_in_background(widget: tk.Misc, task: Callable[[], Any],
                       on_success: Callable[[Any], None],
@@ -182,14 +186,17 @@ def panel(master: tk.Misc, title: str, subtitle: str = "", wraplength: int = 340
 
 
 def screen_title(master: tk.Misc, title: str, back_text: str = "",
-                 back_command: Callable[[], None] | None = None) -> ttk.Frame:
-    """A large screen title with an optional back link on the right."""
-    row = ttk.Frame(master, style="App.TFrame")
-    ttk.Label(row, text=title, style="Display.TLabel").pack(side="left")
+                 back_command: Callable[[], None] | None = None, *,
+                 subtitle: str = "") -> ttk.Frame:
+    """The standard screen header: large title, optional muted subtitle, and back link."""
+    header = ttk.Frame(master, style="App.TFrame")
     if back_command is not None:
-        ttk.Button(row, text=back_text, style="AppLink.TButton", cursor="hand2",
-                   command=back_command).pack(side="right")
-    return row
+        ttk.Button(header, text=back_text, style="AppLink.TButton", cursor="hand2",
+                   command=back_command).pack(side="right", anchor="n", pady=(styles.SPACE_SM, 0))
+    ttk.Label(header, text=title, style="Display.TLabel", wraplength=760, justify="left").pack(anchor="w")
+    if subtitle:
+        ttk.Label(header, text=subtitle, style="Meta.TLabel", wraplength=760, justify="left").pack(anchor="w")
+    return header
 
 
 def message_panel(master: tk.Misc, title: str, message: str, *, error: bool = False) -> ttk.Frame:
@@ -205,7 +212,8 @@ class ScrollFrame(ttk.Frame):
     """A vertically scrollable area. Add children to :attr:`body`.
 
     The scrollbar only appears when the content is taller than the visible area,
-    and the mouse wheel scrolls while the pointer is over the frame.
+    and the mouse wheel scrolls while the pointer is anywhere over the frame,
+    including over its child widgets.
     """
 
     def __init__(self, master: tk.Misc) -> None:
@@ -219,8 +227,9 @@ class ScrollFrame(ttk.Frame):
         self._window = self._canvas.create_window(0, 0, window=self.body, anchor="nw")
         self.body.bind("<Configure>", self._on_resize)
         self._canvas.bind("<Configure>", self._on_resize)
-        self.bind("<Enter>", lambda _e: self.bind_all("<MouseWheel>", self._on_wheel))
-        self.bind("<Leave>", lambda _e: self.unbind_all("<MouseWheel>"))
+        # <Enter>/<Leave> also fire when the pointer crosses into child widgets, so
+        # bind once and check containment instead of rebinding on every crossing.
+        self.bind_all("<MouseWheel>", self._on_wheel)
 
     def _on_resize(self, _event: tk.Event) -> None:
         self._canvas.itemconfigure(self._window, width=self._canvas.winfo_width())
@@ -232,8 +241,16 @@ class ScrollFrame(ttk.Frame):
             self._scrollbar.pack_forget()
             self._canvas.yview_moveto(0)
 
+    def _contains_pointer(self, event: tk.Event) -> bool:
+        widget = self.winfo_containing(event.x_root, event.y_root)
+        while widget is not None:
+            if widget is self:
+                return True
+            widget = widget.master
+        return False
+
     def _on_wheel(self, event: tk.Event) -> None:
-        if self._scrollbar.winfo_ismapped():
+        if self._scrollbar.winfo_ismapped() and self._contains_pointer(event):
             self._canvas.yview_scroll(int(-event.delta / 120), "units")
 
     def destroy(self) -> None:

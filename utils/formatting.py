@@ -40,6 +40,16 @@ def format_show_time(moment: dt.datetime | dt.time) -> str:
     return f"{hour}:{moment.minute:02d} {'AM' if moment.hour < 12 else 'PM'}"
 
 
+def format_showtime(moment: dt.datetime) -> str:
+    """Format a show date and time together, e.g. ``'Sat, Jan 5, 2030  ·  8:15 PM'``."""
+    return f"{format_show_date(moment.date())}  ·  {format_show_time(moment)}"
+
+
+def truncate(text: str, limit: int) -> str:
+    """Shorten ``text`` to at most ``limit`` characters, ending with an ellipsis if cut."""
+    return text if len(text) <= limit else text[: max(limit - 1, 0)].rstrip() + "…"
+
+
 def format_peso(centavos: int) -> str:
     """Format integer centavos as Philippine pesos, e.g. ``35000 -> '₱350.00'``."""
     sign = "-" if centavos < 0 else ""

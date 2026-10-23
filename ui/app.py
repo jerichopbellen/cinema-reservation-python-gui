@@ -4,6 +4,9 @@ Exactly one screen is shown at a time. Switching screens destroys the previous
 screen's widgets, so password fields and stale profile data never linger.
 Authenticated screens go through :meth:`App._show_protected`, which redirects
 to the login screen when there is no active session.
+
+Unexpected exceptions raised in Tk callbacks are logged with a traceback and
+reported to the user with a plain message; tracebacks are never shown.
 """
 
 from __future__ import annotations
@@ -27,12 +30,14 @@ from ui.main_view import HomeView
 from ui.movie_views import MoviesView, ShowtimesView
 from ui.profile_view import ProfileView
 from ui.seating_view import SeatingView
-from ui.widgets import DATABASE_ERROR_MESSAGE
+from ui.widgets import DATABASE_ERROR_MESSAGE, UNEXPECTED_ERROR_MESSAGE
+from utils.formatting import truncate
 
 logger = logging.getLogger(__name__)
 
 MOVIE_SCREENS = ("movies", "showtimes", "seating", "checkout", "confirmation")
 BOOKING_SCREENS = ("bookings", "receipt")
+HEADER_NAME_LIMIT = 28
 
 
 class App:
@@ -56,6 +61,7 @@ class App:
 
         self._screen: ttk.Frame | None = None
         self._current = ""
+        root.report_callback_exception = self._on_callback_error
 
     # --- Public navigation ----------------------------------------------------
 
@@ -109,6 +115,10 @@ class App:
 
     # --- Internals ------------------------------------------------------------
 
+    def _on_callback_error(self, exc_type, exc, tb) -> None:
+        logger.error("Unhandled error on screen %r", self._current, exc_info=(exc_type, exc, tb))
+        messagebox.showerror("Unexpected error", UNEXPECTED_ERROR_MESSAGE, parent=self.root)
+
     def _show_protected(self, name: str, build: Callable[[ttk.Frame, User], ttk.Frame]) -> None:
         if not self.session.is_authenticated:
             self.show_login(message="Please log in to continue.")
@@ -121,7 +131,7 @@ class App:
             return
         except sqlite3.Error:
             logger.exception("Could not load the signed-in user")
-            messagebox.showerror(styles.APP_NAME, DATABASE_ERROR_MESSAGE, parent=self.root)
+            messagebox.showerror("Could not open screen", DATABASE_ERROR_MESSAGE, parent=self.root)
             return
         self.session.update_user(user)
         self._show(name, lambda parent: build(parent, user))
@@ -151,8 +161,9 @@ class App:
             return
 
         account = ttk.Frame(bar, style="Surface.TFrame")
-        account.pack(side="right", padx=(styles.SPACE_XL, 0))
-        ttk.Label(account, text=f"Signed in as {user.full_name}", style="HeaderUser.TLabel").pack(
+        account.pack(side="right", padx=(styles.SPACE_LG, 0))
+        ttk.Label(account, text=f"Signed in as {truncate(user.full_name, HEADER_NAME_LIMIT)}",
+                  style="HeaderUser.TLabel").pack(
             side="left", padx=(0, styles.SPACE_MD)
         )
         ttk.Button(account, text="Log out", style="Header.TButton",
@@ -172,7 +183,7 @@ class App:
         else:
             widget = ttk.Button(parent, text=text, style="NavLink.TButton", command=command,
                                 cursor="hand2")
-        widget.pack(side="left", padx=(styles.SPACE_LG, 0))
+        widget.pack(side="left", padx=(styles.SPACE_MD, 0))
 
     def _build_footer(self) -> None:
         footer = ttk.Frame(self.root, style="Surface.TFrame",

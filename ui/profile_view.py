@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from services.auth_service import PASSWORD_RULES, User, UserNotFoundError
 from ui import styles
-from ui.widgets import Form, FormField, StatusMessage, panel, run_in_background
+from ui.widgets import Form, FormField, StatusMessage, panel, run_in_background, screen_title
 from utils.formatting import format_local_date
 
 if TYPE_CHECKING:
@@ -31,11 +31,8 @@ class ProfileView(ttk.Frame):
         self.app = app
         self.user_id = user.id
 
-        title_row = ttk.Frame(self, style="App.TFrame")
-        title_row.pack(fill="x", pady=(0, styles.SPACE_MD))
-        ttk.Label(title_row, text="My Profile", style="Display.TLabel").pack(side="left")
-        ttk.Button(title_row, text="← Back to home", style="AppLink.TButton", cursor="hand2",
-                   command=app.show_home).pack(side="right")
+        screen_title(self, "My Profile", "← Back to home", app.show_home).pack(
+            fill="x", pady=(0, styles.SPACE_MD))
 
         columns = ttk.Frame(self, style="App.TFrame")
         columns.pack(fill="x")

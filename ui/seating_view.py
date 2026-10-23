@@ -23,8 +23,8 @@ from services.seating_service import (
     SeatsUnavailableError,
 )
 from ui import styles
-from ui.widgets import StatusMessage, message_panel, screen_title, user_message_for
-from utils.formatting import format_peso, format_show_date, format_show_time
+from ui.widgets import EXPECTED_ERRORS, StatusMessage, message_panel, screen_title, user_message_for
+from utils.formatting import format_peso, format_showtime
 
 if TYPE_CHECKING:
     from ui.app import App
@@ -40,7 +40,7 @@ class SeatingView(ttk.Frame):
 
         try:
             movie, showtime, self.booked = app.seating.open_showtime(showtime_id)
-        except Exception as exc:
+        except EXPECTED_ERRORS as exc:
             previous = app.session.seat_selection
             back = (lambda: app.show_showtimes(previous.movie.id)) if previous else app.show_movies
             screen_title(self, "Select your seats", "← Back", back).pack(fill="x")
@@ -61,17 +61,10 @@ class SeatingView(ttk.Frame):
         stale = frozenset(selection.seats) & self.booked
         selection.discard(stale)
 
-        header = ttk.Frame(self, style="App.TFrame")
-        header.pack(fill="x", pady=(0, styles.SPACE_MD))
-        ttk.Button(header, text="← Back to showtimes", style="AppLink.TButton", cursor="hand2",
-                   command=lambda: app.show_showtimes(movie.id)).pack(side="right", anchor="n")
-        ttk.Label(header, text=f"Select your seats · {movie.title}", style="Heading.TLabel").pack(anchor="w")
-        ttk.Label(
-            header,
-            text=(f"{format_show_date(showtime.starts_at.date())}  ·  "
-                  f"{format_show_time(showtime.starts_at)}  ·  {showtime.auditorium}"),
-            style="Meta.TLabel",
-        ).pack(anchor="w")
+        screen_title(
+            self, "Select your seats", "← Back to showtimes", lambda: app.show_showtimes(movie.id),
+            subtitle=f"{movie.title}  ·  {format_showtime(showtime.starts_at)}  ·  {showtime.auditorium}",
+        ).pack(fill="x", pady=(0, styles.SPACE_MD))
 
         body = ttk.Frame(self, style="App.TFrame")
         body.pack(fill="both", expand=True)
@@ -141,7 +134,7 @@ class SeatingView(ttk.Frame):
         ttk.Frame(card, style="Divider.TFrame", height=1).pack(fill="x", pady=styles.SPACE_SM)
         total_row = ttk.Frame(card, style="Panel.TFrame")
         total_row.pack(fill="x")
-        ttk.Label(total_row, text="Total", style="PanelField.TLabel").pack(side="left", anchor="s")
+        ttk.Label(total_row, text="Total", style="PanelField.TLabel").pack(side="left")
         self.total_label = ttk.Label(total_row, style="PanelTotal.TLabel")
         self.total_label.pack(side="right")
 
@@ -217,11 +210,11 @@ class SeatingView(ttk.Frame):
             self.status.error(str(exc))
             return
         except ShowtimeUnavailableError as exc:
-            messagebox.showerror(styles.APP_NAME, str(exc), parent=self)
+            messagebox.showerror("Showtime unavailable", str(exc), parent=self)
             self.app.session.seat_selection = None
             self.app.show_showtimes(self.selection.movie.id)
             return
-        except Exception as exc:
+        except EXPECTED_ERRORS as exc:
             self.status.error(user_message_for(exc))
             return
 

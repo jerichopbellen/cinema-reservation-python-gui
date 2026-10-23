@@ -5,12 +5,13 @@ __pycache__/
 venv/
 env/
 
-# Local application data (SQLite database lives here)
+# Local application data (SQLite database and log file live here)
 data/
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
+*.log
 
 # Generated receipts (keep the folder itself)
 receipts/*

@@ -14,7 +14,7 @@ from utils.branding import APP_NAME, APP_TAGLINE
 __all__ = ["APP_NAME", "APP_TAGLINE", "apply_theme", "center_window"]
 WINDOW_TITLE = f"{APP_NAME} — Cinema Ticket Booking"
 WINDOW_SIZE = (1100, 700)
-WINDOW_MIN_SIZE = (900, 660)
+WINDOW_MIN_SIZE = (1000, 660)
 
 # Colors
 BG_APP = "#1c1c1f"          # charcoal window background
@@ -74,8 +74,6 @@ def apply_theme(root: tk.Tk) -> ttk.Style:
 
     style.configure("Brand.TLabel", background=BG_SURFACE, foreground=TEXT_PRIMARY, font=FONT_BRAND)
     style.configure("BrandAccent.TLabel", background=BG_SURFACE, foreground=ACCENT, font=FONT_BRAND)
-    style.configure("Nav.TLabel", background=BG_SURFACE, foreground=TEXT_MUTED, font=FONT_NAV)
-    style.configure("NavHint.TLabel", background=BG_SURFACE, foreground=TEXT_FAINT, font=FONT_SMALL)
 
     style.configure("Display.TLabel", background=BG_APP, foreground=TEXT_PRIMARY, font=FONT_DISPLAY)
     style.configure("Tagline.TLabel", background=BG_APP, foreground=ACCENT, font=FONT_HEADING)
@@ -85,8 +83,6 @@ def apply_theme(root: tk.Tk) -> ttk.Style:
                     font=FONT_HEADING)
     style.configure("PanelBody.TLabel", background=BG_SURFACE_ALT, foreground=TEXT_MUTED,
                     font=FONT_BODY)
-    style.configure("Status.TLabel", background=BG_SURFACE_ALT, foreground=TEXT_SUCCESS,
-                    font=FONT_HEADING)
 
     style.configure("Footer.TLabel", background=BG_SURFACE, foreground=TEXT_MUTED, font=FONT_SMALL)
 
@@ -131,14 +127,16 @@ def apply_theme(root: tk.Tk) -> ttk.Style:
     )
     style.map("Secondary.TButton", background=[("active", BORDER)],
               foreground=[("disabled", TEXT_DISABLED)])
+    # Text-style links. width=0 overrides clam's 11-character minimum so links size to their text.
     for name, surface in (("Link.TButton", BG_SURFACE_ALT), ("AppLink.TButton", BG_APP)):
         style.configure(name, background=surface, foreground=ACCENT, font=FONT_BODY,
-                        borderwidth=0, focusthickness=0, padding=0)
-        style.map(name, background=[("active", surface)], foreground=[("active", TEXT_PRIMARY)])
+                        borderwidth=0, focusthickness=0, padding=0, width=0)
+        style.map(name, background=[("active", surface), ("disabled", surface)],
+                  foreground=[("disabled", TEXT_DISABLED), ("active", TEXT_PRIMARY)])
 
     # Header navigation
     style.configure("NavLink.TButton", background=BG_SURFACE, foreground=TEXT_PRIMARY,
-                    font=FONT_NAV, borderwidth=0, focusthickness=0, padding=0)
+                    font=FONT_NAV, borderwidth=0, focusthickness=0, padding=0, width=0)
     style.map("NavLink.TButton", background=[("active", BG_SURFACE)],
               foreground=[("active", ACCENT)])
     style.configure("NavCurrent.TLabel", background=BG_SURFACE, foreground=ACCENT, font=FONT_NAV)

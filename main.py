@@ -3,11 +3,15 @@
 Run with ``python main.py`` from any working directory. Python places this
 file's folder on ``sys.path``, and the database location is resolved relative
 to the project, so the current directory does not matter.
+
+Log messages go to the console and to ``data/cinerojo.log``. No passwords,
+hashes, or salts are ever logged.
 """
 
 from __future__ import annotations
 
 import logging
+import logging.handlers
 import sqlite3
 import sys
 import tkinter as tk
@@ -15,12 +19,28 @@ from pathlib import Path
 from tkinter import messagebox
 
 from database import initialize_database
+from database.connection import DATA_DIR
 from services.auth_service import AuthService
 from services.session import Session
 from ui import styles
 from ui.app import App
 
 logger = logging.getLogger("cinerojo")
+
+LOG_FILE = DATA_DIR / "cinerojo.log"
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+
+
+def configure_logging() -> None:
+    """Log to the console and to a small rotating file next to the database."""
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.handlers.RotatingFileHandler(
+            LOG_FILE, maxBytes=512_000, backupCount=2, encoding="utf-8"))
+    except OSError as exc:
+        print(f"Logging to file disabled: {exc}", file=sys.stderr)
+    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, handlers=handlers)
 
 
 def enable_windows_dpi_awareness() -> None:
@@ -58,7 +78,7 @@ def show_startup_error(message: str) -> None:
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    configure_logging()
     enable_windows_dpi_awareness()
 
     try:

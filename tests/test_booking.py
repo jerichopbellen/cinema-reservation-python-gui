@@ -17,8 +17,6 @@ from pathlib import Path
 from unittest import mock
 
 from database.connection import DEFAULT_DB_PATH, PROJECT_ROOT, connect, get_connection
-from database.schema import create_schema
-from database.seed import seed_sample_data
 from services import booking_service
 from services.booking_service import (
     DISPLAY_CANCELED,
@@ -32,21 +30,18 @@ from services.booking_service import (
     SeatConflictError,
 )
 from services.catalog_service import CatalogService, ShowtimeUnavailableError
-from services.receipt_service import RECEIPTS_DIR, receipt_filename, render_receipt, save_receipt
+from services.receipt_service import (
+    RECEIPT_WIDTH,
+    RECEIPTS_DIR,
+    receipt_filename,
+    render_receipt,
+    save_receipt,
+)
 from services.seating_service import Seat, SeatingService
+from tests.helpers import START_CLOCK, FakeClock, create_seeded_database
 from utils.formatting import format_local_datetime, format_show_date, format_show_time
 
-SEED_DAY = dt.date(2030, 1, 1)          # sample showtimes run Jan 2–4, 2030
-START_CLOCK = dt.datetime(2030, 1, 2, 12, 0)
 REFERENCE_PATTERN = re.compile(r"CR-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{10}")
-
-
-class FakeClock:
-    def __init__(self, moment: dt.datetime) -> None:
-        self.moment = moment
-
-    def __call__(self) -> dt.datetime:
-        return self.moment
 
 
 class BookingTestCase(unittest.TestCase):
@@ -56,9 +51,7 @@ class BookingTestCase(unittest.TestCase):
         self.tmp_dir = Path(tmp.name)
         self.db_path = self.tmp_dir / "booking.db"
         self.assertNotEqual(self.db_path.resolve(), DEFAULT_DB_PATH.resolve())
-        with get_connection(self.db_path) as conn:
-            create_schema(conn)
-            seed_sample_data(conn, today=SEED_DAY)
+        create_seeded_database(self.db_path)
 
         self.clock = FakeClock(START_CLOCK)
         self.catalog = CatalogService(self.db_path, now=self.clock)
@@ -411,6 +404,21 @@ class ReceiptTests(BookingTestCase):
         booking = self.bookings.create_booking(self.alice, self.show.id, ["C2"])
         with self.assertRaises(OSError):
             save_receipt(booking, self.tmp_dir)  # a directory, not a file
+
+    def test_long_values_wrap_within_receipt_width(self) -> None:
+        self.conn.execute("UPDATE movies SET title = ? WHERE id = ?",
+                          ("The Extraordinarily Long Chronicles of the Last Lighthouse Keeper", self.show.movie_id))
+        self.conn.execute("UPDATE users SET full_name = ? WHERE id = ?",
+                          ("Maria Clara Gonzales de los Santos y Reyes", self.alice))
+        self.conn.commit()
+        seats = [f"{row}{n}" for row in "AB" for n in range(1, 11)]
+        booking = self.bookings.create_booking(self.alice, self.show.id, seats)
+        text = render_receipt(booking)
+        self.assertTrue(all(len(line) <= RECEIPT_WIDTH for line in text.splitlines()))
+        flattened = " ".join(line.strip() for line in text.splitlines())
+        self.assertIn("Extraordinarily Long Chronicles of the Last Lighthouse Keeper", flattened)
+        self.assertIn("Gonzales de los Santos y Reyes", flattened)
+        self.assertIn("B9, B10", flattened)
 
     def test_receipt_filename_is_safe_and_directory_is_project_relative(self) -> None:
         self.assertEqual(receipt_filename("CR-ABCDE23456"), "receipt_CR-ABCDE23456.txt")

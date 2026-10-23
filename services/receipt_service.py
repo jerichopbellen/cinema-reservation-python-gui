@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+import textwrap
 from pathlib import Path
 
 from database.connection import PROJECT_ROOT
@@ -19,6 +20,7 @@ from utils.formatting import format_local_datetime, format_peso, format_show_dat
 
 RECEIPTS_DIR = PROJECT_ROOT / "receipts"
 RECEIPT_WIDTH = 46
+LABEL_WIDTH = 18
 
 
 def receipt_filename(reference: str) -> str:
@@ -34,7 +36,11 @@ def render_receipt(booking: BookingDetails, generated_at: dt.datetime | None = N
     thin = "-" * RECEIPT_WIDTH
 
     def line(label: str, value: str) -> str:
-        return f"{label:<18}{value}"
+        """A label/value row; long values wrap onto indented continuation lines."""
+        wrapped = textwrap.wrap(value, RECEIPT_WIDTH - LABEL_WIDTH) or [""]
+        indent = " " * LABEL_WIDTH
+        rows = [f"{label:<{LABEL_WIDTH}}{wrapped[0]}"] + [indent + part for part in wrapped[1:]]
+        return "\n".join(rows)
 
     lines = [
         rule,

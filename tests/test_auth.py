@@ -6,6 +6,7 @@ database is never opened. No Tkinter windows are created.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import subprocess
 import sys
@@ -270,6 +271,38 @@ class ProfileTests(AuthTestCase):
             self.auth.update_full_name(999, "Ghost")
         with self.assertRaises(UserNotFoundError):
             self.auth.change_password(999, PASSWORD, "newpass456", "newpass456")
+
+
+class SensitiveDataTests(AuthTestCase):
+    def test_passwords_hashes_and_salts_are_never_logged(self) -> None:
+        records: list[logging.LogRecord] = []
+
+        class Capture(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                records.append(record)
+
+        handler = Capture(level=logging.DEBUG)
+        root = logging.getLogger()
+        previous_level = root.level
+        root.addHandler(handler)
+        root.setLevel(logging.DEBUG)
+        self.addCleanup(root.removeHandler, handler)
+        self.addCleanup(root.setLevel, previous_level)
+
+        user = self.register("juan")
+        self.auth.authenticate("juan", PASSWORD)
+        with self.assertRaises(InvalidCredentialsError):
+            self.auth.authenticate("juan", "wrongpass1")
+        self.auth.change_password(user.id, PASSWORD, "newpass456", "newpass456")
+
+        initialize_database(self.db_path.with_name("other.db"))  # emits an INFO record
+        self.assertTrue(records, "log capture is not working")
+
+        row = self.stored_row(user.id)
+        secrets = (PASSWORD, "wrongpass1", "newpass456", row["password_hash"], row["password_salt"])
+        logged = " | ".join(record.getMessage() for record in records)
+        for secret in secrets:
+            self.assertNotIn(secret, logged)
 
 
 class SessionTests(AuthTestCase):

@@ -25,6 +25,7 @@ from services.receipt_service import RECEIPTS_DIR, receipt_filename, render_rece
 from services.seating_service import PendingCheckout, SeatsUnavailableError
 from ui import styles
 from ui.widgets import (
+    EXPECTED_ERRORS,
     ScrollFrame,
     StatusMessage,
     message_panel,
@@ -33,7 +34,13 @@ from ui.widgets import (
     screen_title,
     user_message_for,
 )
-from utils.formatting import format_local_datetime, format_peso, format_show_date, format_show_time
+from utils.formatting import (
+    format_local_datetime,
+    format_peso,
+    format_show_date,
+    format_show_time,
+    format_showtime,
+)
 
 if TYPE_CHECKING:
     from ui.app import App
@@ -42,10 +49,6 @@ BADGE_STYLES = {
     DISPLAY_CANCELED: "BadgeCanceled.TLabel",
     DISPLAY_COMPLETED: "BadgeCompleted.TLabel",
 }
-
-
-def showtime_text(starts_at) -> str:
-    return f"{format_show_date(starts_at.date())}  ·  {format_show_time(starts_at)}"
 
 
 def detail_grid(parent: tk.Misc, rows: list[tuple[str, str]], *, value_style: str = "PanelField.TLabel",
@@ -107,15 +110,15 @@ class CheckoutView(ttk.Frame):
             app.session.clear_booking_state()
             self._dead_end("This showtime cannot be booked", str(exc))
             return
-        except Exception as exc:
+        except EXPECTED_ERRORS as exc:
             self._dead_end("Checkout could not be loaded", user_message_for(exc), back_to_seats=True)
             return
         app.session.pending_checkout = checkout
         self.checkout = checkout
 
-        screen_title(self, "Checkout", "← Back to seat selection", self._back_to_seats).pack(fill="x")
-        ttk.Label(self, text="Review your booking, then confirm to reserve your seats.",
-                  style="Meta.TLabel").pack(anchor="w", pady=(0, styles.SPACE_MD))
+        screen_title(self, "Checkout", "← Back to seat selection", self._back_to_seats,
+                     subtitle="Review your booking, then confirm to reserve your seats.").pack(
+            fill="x", pady=(0, styles.SPACE_MD))
 
         columns = ttk.Frame(self, style="App.TFrame")
         columns.pack(fill="x")
@@ -225,7 +228,7 @@ class ConfirmationView(ttk.Frame):
         self.app = app
         try:
             booking = app.bookings.get_booking(user.id, booking_id)
-        except Exception as exc:
+        except EXPECTED_ERRORS as exc:
             screen_title(self, "Booking").pack(fill="x", pady=(0, styles.SPACE_MD))
             message_panel(self, "Booking could not be loaded", user_message_for(exc), error=True).pack(fill="x")
             return
@@ -241,7 +244,7 @@ class ConfirmationView(ttk.Frame):
         ttk.Label(card, text=booking.reference, style="PanelReference.TLabel").pack(anchor="w")
         detail_grid(card, [
             ("Movie", booking.movie_title),
-            ("Showtime", f"{showtime_text(booking.starts_at)}  ·  {booking.auditorium}"),
+            ("Showtime", f"{format_showtime(booking.starts_at)}  ·  {booking.auditorium}"),
             ("Seats", ", ".join(booking.seat_labels)),
             ("Tickets", str(booking.ticket_count)),
             ("Total", format_peso(booking.total_amount)),
@@ -270,15 +273,15 @@ class BookingsView(ttk.Frame):
         self.app = app
         self.user = user
 
-        screen_title(self, "My Bookings", "Browse movies →", app.show_movies).pack(fill="x")
-        ttk.Label(self, text="Upcoming bookings are listed first, followed by past and canceled ones.",
-                  style="Meta.TLabel").pack(anchor="w")
+        screen_title(self, "My Bookings", "Browse movies →", app.show_movies,
+                     subtitle="Upcoming bookings are listed first, followed by past and canceled ones."
+                     ).pack(fill="x")
         if message:
             ttk.Label(self, text=message, style="Success.TLabel").pack(anchor="w", pady=(styles.SPACE_XS, 0))
 
         try:
             bookings = app.bookings.list_bookings(user.id)
-        except Exception as exc:
+        except EXPECTED_ERRORS as exc:
             message_panel(self, "Bookings could not be loaded", user_message_for(exc),
                           error=True).pack(fill="x", pady=(styles.SPACE_MD, 0))
             return
@@ -313,7 +316,7 @@ class BookingsView(ttk.Frame):
         ttk.Label(top, text=booking.reference, style="PanelMono.TLabel").pack(
             side="left", padx=(styles.SPACE_MD, 0))
 
-        ttk.Label(info, text=f"{showtime_text(booking.starts_at)}  ·  {booking.auditorium}",
+        ttk.Label(info, text=f"{format_showtime(booking.starts_at)}  ·  {booking.auditorium}",
                   style="PanelField.TLabel").pack(anchor="w", pady=(styles.SPACE_XS, 0))
         tickets = f"{booking.ticket_count} ticket{'s' if booking.ticket_count != 1 else ''}"
         ttk.Label(info, text=f"Seats {', '.join(booking.seat_labels)}  ·  {tickets}  ·  "
@@ -335,7 +338,7 @@ class BookingsView(ttk.Frame):
         confirmed = messagebox.askyesno(
             "Cancel booking",
             f"Cancel booking {booking.reference} for {booking.movie_title} on "
-            f"{showtime_text(booking.starts_at)}?\n\nSeats {', '.join(booking.seat_labels)} will be "
+            f"{format_showtime(booking.starts_at)}?\n\nSeats {', '.join(booking.seat_labels)} will be "
             "released for other customers. This cannot be undone.",
             icon="warning", parent=self,
         )
@@ -344,11 +347,11 @@ class BookingsView(ttk.Frame):
         try:
             canceled = self.app.bookings.cancel_booking(self.user.id, booking.id)
         except BookingError as exc:
-            messagebox.showerror(styles.APP_NAME, str(exc), parent=self)
-            self.app.show_bookings()
+            messagebox.showerror("Booking not canceled", str(exc), parent=self)
+            self.app.show_bookings()  # the booking may have changed; show its current state
             return
-        except Exception as exc:
-            messagebox.showerror(styles.APP_NAME, user_message_for(exc), parent=self)
+        except EXPECTED_ERRORS as exc:
+            messagebox.showerror("Booking not canceled", user_message_for(exc), parent=self)
             return
         self.app.show_bookings(
             message=f"Booking {canceled.reference} was canceled and its seats were released.")
@@ -368,7 +371,7 @@ class ReceiptView(ttk.Frame):
 
         try:
             booking = app.bookings.get_booking(user.id, booking_id)
-        except Exception as exc:
+        except EXPECTED_ERRORS as exc:
             message_panel(self, "Receipt could not be loaded", user_message_for(exc), error=True).pack(fill="x")
             return
 
