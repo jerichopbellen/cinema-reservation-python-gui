@@ -60,6 +60,16 @@ python promote_admin.py USERNAME
 
 Administrators see **Manage Movies** in the sidebar after logging in. Accounts made through the app's registration screen are always customers.
 
+## Seeding Demo Movies
+
+Add new fictional movies with upcoming showtimes (asks before changing anything):
+
+```bash
+python seed_movies.py
+```
+
+Every run adds movies whose titles and descriptions aren't already in the database, and showtimes that all start after the moment you run it. Showtimes never overlap in a cinema (cleaning time included), and a day without room is skipped. Options: `--movies N` (default 5), `--days N` (default 3), `--per-day N` (default 2), `--yes` to skip the prompt, `--db PATH` for another database file.
+
 ## Project Structure
 
 ```text
@@ -67,10 +77,12 @@ cinema/
 ├── main.py
 ├── create_admin.py
 ├── promote_admin.py
+├── seed_movies.py
 ├── database/
 │   ├── connection.py
 │   ├── schema.py
 │   ├── seed.py
+│   ├── movie_generator.py
 │   └── inspect_db.py
 ├── services/
 │   ├── auth_service.py
