@@ -109,7 +109,8 @@ class RegistrationTests(AuthTestCase):
 
     def test_user_object_exposes_no_password_data(self) -> None:
         user = self.register()
-        self.assertEqual(set(vars(user)), {"id", "full_name", "username", "created_at"})
+        self.assertEqual(set(vars(user)), {"id", "full_name", "username", "created_at", "role"})
+        self.assertFalse({"password", "password_hash", "password_salt"} & set(vars(user)))
 
     def test_duplicate_username_rejected_case_insensitively(self) -> None:
         self.register("juan")

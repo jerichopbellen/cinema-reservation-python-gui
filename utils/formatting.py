@@ -14,11 +14,15 @@ def format_local_date(utc_timestamp: str) -> str:
     return f"{local:%B} {local.day}, {local.year}"
 
 
-def format_local_datetime(utc_timestamp: str) -> str:
-    """Format a UTC database timestamp in local time, e.g. ``'Oct 24, 2026, 3:05 PM'``."""
+def format_local_datetime(utc_timestamp: str, *, with_year: bool = True) -> str:
+    """Format a UTC database timestamp in local time, e.g. ``'Oct 24, 2026, 3:05 PM'``.
+
+    ``with_year=False`` gives the compact ``'Oct 24, 3:05 PM'`` for dense tables.
+    """
     moment = dt.datetime.strptime(utc_timestamp, DB_TIMESTAMP_FORMAT).replace(tzinfo=dt.timezone.utc)
     local = moment.astimezone()
-    return f"{local:%b} {local.day}, {local.year}, {format_show_time(local)}"
+    year = f" {local.year}," if with_year else ""
+    return f"{local:%b} {local.day},{year} {format_show_time(local)}"
 
 
 def format_duration(minutes: int) -> str:

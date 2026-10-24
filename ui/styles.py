@@ -72,11 +72,12 @@ FONT_TOTAL = (_DISPLAY_FAMILIES[-1], 22, "bold")
 FONT_ICON = (_ICON_FAMILIES[-1], 12)
 
 # Icon glyphs (Segoe Fluent Icons / Segoe MDL2 Assets code points)
-ICON_HOME = ""
-ICON_MOVIES = ""
-ICON_BOOKINGS = ""
-ICON_PROFILE = ""
-ICON_LOGOUT = ""
+ICON_HOME = "\uE80F"
+ICON_MOVIES = "\uE714"
+ICON_BOOKINGS = "\uE787"
+ICON_PROFILE = "\uE77B"
+ICON_LOGOUT = "\uF3B1"
+ICON_ADMIN = "\uE713"
 
 # Spacing scale (pixels, 4/8-based)
 SPACE_XS = 4
@@ -189,6 +190,24 @@ def apply_theme(root: tk.Tk) -> ttk.Style:
         lightcolor=[("focus", ACCENT)],
     )
 
+    # Dropdowns (read-only comboboxes) and their pop-up lists
+    style.configure(
+        "TCombobox", fieldbackground=BG_APP, background=BG_RAISED, foreground=TEXT_PRIMARY,
+        arrowcolor=TEXT_PRIMARY, bordercolor=BORDER_STRONG, lightcolor=BG_APP, darkcolor=BG_APP,
+        padding=(10, 8), selectbackground=BG_APP, selectforeground=TEXT_PRIMARY,
+    )
+    style.map(
+        "TCombobox",
+        fieldbackground=[("readonly", BG_APP)], foreground=[("readonly", TEXT_PRIMARY)],
+        selectbackground=[("readonly", BG_APP)], selectforeground=[("readonly", TEXT_PRIMARY)],
+        bordercolor=[("focus", ACCENT), ("hover", TEXT_FAINT)], background=[("active", BORDER)],
+    )
+    root.option_add("*TCombobox*Listbox.background", BG_SURFACE_ALT)
+    root.option_add("*TCombobox*Listbox.foreground", TEXT_PRIMARY)
+    root.option_add("*TCombobox*Listbox.selectBackground", ACCENT)
+    root.option_add("*TCombobox*Listbox.selectForeground", ON_ACCENT)
+    root.option_add("*TCombobox*Listbox.font", FONT_BODY)
+
     # Buttons
     style.configure(
         "Accent.TButton", background=ACCENT, foreground=ON_ACCENT, font=FONT_BUTTON,
@@ -208,6 +227,13 @@ def apply_theme(root: tk.Tk) -> ttk.Style:
               background=[("disabled", BG_SURFACE_ALT), ("pressed", BORDER_STRONG), ("active", BORDER)],
               bordercolor=[("active", TEXT_FAINT)],
               foreground=[("disabled", TEXT_DISABLED)])
+    # Same look, tighter padding and no minimum width, for buttons inside table rows.
+    style.configure("Compact.TButton", background=BG_RAISED, foreground=TEXT_PRIMARY, font=FONT_NAV,
+                    bordercolor=BORDER_STRONG, lightcolor=BG_RAISED, darkcolor=BG_RAISED,
+                    focusthickness=0, padding=(SPACE_MD - 2, 6), width=0)
+    style.map("Compact.TButton",
+              background=[("pressed", BORDER_STRONG), ("active", BORDER)],
+              bordercolor=[("active", TEXT_FAINT)])
     # Text-style links. width=0 overrides clam's 11-character minimum so links size to their text.
     for name, surface in (("Link.TButton", BG_SURFACE_ALT), ("AppLink.TButton", BG_APP)):
         style.configure(name, background=surface, foreground=ACCENT, font=FONT_NAV,

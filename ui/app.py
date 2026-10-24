@@ -23,9 +23,17 @@ from tkinter import messagebox, ttk
 from services.auth_service import AuthService, User, UserNotFoundError
 from services.booking_service import BookingService
 from services.catalog_service import CatalogService
+from services.movie_admin_service import MovieAdminService
+from services.showtime_admin_service import ShowtimeAdminService
 from services.seating_service import SeatingService
 from services.session import Session
 from ui import brand, styles
+from ui.admin_views import (
+    AdminMoviesView,
+    AdminShowtimeBookingsView,
+    AdminShowtimesView,
+    MovieFormView,
+)
 from ui.auth_views import LoginView, RegisterView
 from ui.booking_views import BookingsView, CheckoutView, ConfirmationView, ReceiptView
 from ui.main_view import HomeView
@@ -39,7 +47,8 @@ logger = logging.getLogger(__name__)
 
 MOVIE_SCREENS = ("movies", "showtimes", "seating", "checkout", "confirmation")
 BOOKING_SCREENS = ("bookings", "receipt")
-SIDEBAR_NAME_LIMIT = 20
+ADMIN_SCREENS = ("admin_movies", "movie_form", "admin_showtimes", "showtime_bookings")
+SIDEBAR_NAME_LIMIT = 16  # fits beside the avatar at the sidebar's fixed width
 TOAST_MILLISECONDS = 3500
 
 
@@ -54,6 +63,8 @@ class App:
         self.catalog = CatalogService(db_path)
         self.seating = SeatingService(db_path, self.catalog)
         self.bookings = BookingService(db_path, self.catalog)
+        self.movie_admin = MovieAdminService(db_path, auth)
+        self.showtime_admin = ShowtimeAdminService(db_path, auth, now=self.catalog.now)
 
         self._sidebar = ttk.Frame(root, style="Surface.TFrame", width=styles.SIDEBAR_WIDTH)
         self._sidebar.pack_propagate(False)
@@ -104,6 +115,21 @@ class App:
     def show_receipt(self, booking_id: int, back_to: str = "bookings") -> None:
         self._show_protected("receipt",
                              lambda parent, user: ReceiptView(parent, self, user, booking_id, back_to))
+
+    def show_admin_movies(self) -> None:
+        self._show_admin("admin_movies", lambda parent, user: AdminMoviesView(parent, self, user))
+
+    def show_movie_form(self, movie_id: int | None = None) -> None:
+        self._show_admin("movie_form",
+                         lambda parent, user: MovieFormView(parent, self, user, movie_id))
+
+    def show_admin_showtimes(self, movie_id: int) -> None:
+        self._show_admin("admin_showtimes",
+                         lambda parent, user: AdminShowtimesView(parent, self, user, movie_id))
+
+    def show_showtime_bookings(self, showtime_id: int) -> None:
+        self._show_admin("showtime_bookings",
+                         lambda parent, user: AdminShowtimeBookingsView(parent, self, user, showtime_id))
 
     def login(self, user: User) -> None:
         self.session.login(user)
@@ -163,6 +189,23 @@ class App:
         self.session.update_user(user)
         self._show(name, lambda parent: build(parent, user))
 
+    def _show_admin(self, name: str, build: Callable[[ttk.Frame, User], ttk.Frame]) -> None:
+        """Like _show_protected, but only for administrators (role re-read from the database).
+
+        This only decides what to display; the admin service re-checks the role
+        on every operation regardless.
+        """
+        if self.session.is_authenticated:
+            try:
+                user = self.auth.get_user(self.session.require_user().id)
+            except (UserNotFoundError, sqlite3.Error):
+                user = None  # _show_protected reports these properly
+            if user is not None and not user.is_admin:
+                self.show_home()
+                self.toast("Administrator access is required for that screen.", error=True)
+                return
+        self._show_protected(name, build)
+
     def _show(self, name: str, build: Callable[[ttk.Frame], ttk.Frame]) -> None:
         if self._screen is not None:
             self._screen.destroy()
@@ -200,6 +243,14 @@ class App:
             item = NavItem(self._sidebar, icon, text, command, active=self._current in screens)
             item.pack(fill="x", padx=styles.SPACE_SM, pady=1)
             self.nav_items[text] = item
+
+        if user.is_admin:
+            ttk.Label(self._sidebar, text="ADMIN", style="SideEyebrow.TLabel").pack(
+                anchor="w", padx=styles.SPACE_LG, pady=(styles.SPACE_LG, styles.SPACE_SM))
+            item = NavItem(self._sidebar, styles.ICON_ADMIN, "Manage Movies", self.show_admin_movies,
+                           active=self._current in ADMIN_SCREENS)
+            item.pack(fill="x", padx=styles.SPACE_SM, pady=1)
+            self.nav_items["Manage Movies"] = item
 
         footer = ttk.Frame(self._sidebar, style="Surface.TFrame", padding=(styles.SPACE_SM, 0))
         footer.pack(side="bottom", fill="x", pady=(0, styles.SPACE_LG))

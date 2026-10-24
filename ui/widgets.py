@@ -44,30 +44,42 @@ def run_in_background(widget: tk.Misc, task: Callable[[], Any],
     Keeps the window responsive during slow work such as password hashing.
     Callbacks are skipped if ``widget`` was destroyed in the meantime (for
     example, the user navigated away or closed the window).
+
+    Tk objects must only be touched from the Tk thread, and ``task`` usually
+    references its screen's widgets. So the worker reaches ``task`` only through
+    ``holder``, and the Tk thread waits for the worker to finish completely
+    before releasing it; the screen is therefore never freed on the worker.
     """
     results: queue.SimpleQueue[tuple[bool, Any]] = queue.SimpleQueue()
+    holder: list[Callable[[], Any]] = [task]
+    root = widget._root()  # keeps polling even if ``widget`` itself is destroyed
 
     def worker() -> None:
         try:
-            results.put((True, task()))
+            results.put((True, holder[0]()))
         except Exception as exc:  # delivered to on_error on the Tk thread
             results.put((False, exc))
 
+    thread = threading.Thread(target=worker, daemon=True)
+
     def poll() -> None:
+        if thread.is_alive():
+            try:
+                root.after(40, poll)
+            except tk.TclError:
+                pass  # the window was closed; there is nothing left to update
+            return
+        ok, value = results.get()
+        holder.clear()  # release the task (and its widgets) here, on the Tk thread
         try:
-            if not widget.winfo_exists():
-                return
+            alive = widget.winfo_exists()
         except tk.TclError:
             return
-        try:
-            ok, value = results.get_nowait()
-        except queue.Empty:
-            widget.after(40, poll)
-            return
-        (on_success if ok else on_error)(value)
+        if alive:
+            (on_success if ok else on_error)(value)
 
-    threading.Thread(target=worker, daemon=True).start()
-    widget.after(40, poll)
+    thread.start()
+    root.after(40, poll)
 
 
 def user_message_for(exc: Exception) -> str:
@@ -82,16 +94,34 @@ def user_message_for(exc: Exception) -> str:
 
 
 class FormField(ttk.Frame):
-    """A labeled entry with a single line below it for a hint or an error."""
+    """A labeled input with a single line below it for a hint or an error.
+
+    The input is a text entry by default, a read-only dropdown when ``choices``
+    is given, or a multi-line text box when ``lines`` is greater than 1.
+    """
 
     def __init__(self, master: tk.Misc, label: str, *, hint: str = "", secret: bool = False,
-                 width: int = 36, wraplength: int = 340) -> None:
+                 width: int = 36, wraplength: int = 340, choices: tuple[str, ...] = (),
+                 lines: int = 1) -> None:
         super().__init__(master, style="Panel.TFrame")
         self._hint = hint
         self.var = tk.StringVar()
+        self.multiline = lines > 1
 
         ttk.Label(self, text=label, style="PanelField.TLabel").pack(anchor="w")
-        self.entry = ttk.Entry(self, textvariable=self.var, width=width, show="•" if secret else "")
+        if self.multiline:
+            self.entry: tk.Widget = tk.Text(
+                self, height=lines, width=width, wrap="word", font=styles.FONT_BODY,
+                background=styles.BG_APP, foreground=styles.TEXT_PRIMARY,
+                insertbackground=styles.ACCENT, selectbackground=styles.ACCENT,
+                selectforeground=styles.ON_ACCENT, relief="flat", padx=10, pady=8,
+                highlightthickness=1, highlightbackground=styles.BORDER_STRONG,
+                highlightcolor=styles.ACCENT)
+        elif choices:
+            self.entry = ttk.Combobox(self, textvariable=self.var, values=choices, width=width,
+                                      state="readonly", font=styles.FONT_BODY)
+        else:
+            self.entry = ttk.Entry(self, textvariable=self.var, width=width, show="•" if secret else "")
         self.entry.pack(fill="x", pady=(styles.SPACE_XS, 2))
         # The message line is only packed while it has text, so fields without hints stay compact.
         self._message = ttk.Label(self, style="PanelHint.TLabel", wraplength=wraplength,
@@ -100,13 +130,19 @@ class FormField(ttk.Frame):
         self.clear_error()
 
     def get(self) -> str:
+        if self.multiline:
+            return self.entry.get("1.0", "end-1c")
         return self.var.get()
 
     def set(self, value: str) -> None:
-        self.var.set(value)
+        if self.multiline:
+            self.entry.delete("1.0", "end")
+            self.entry.insert("1.0", value)
+        else:
+            self.var.set(value)
 
     def clear(self) -> None:
-        self.var.set("")
+        self.set("")
 
     def show_error(self, message: str) -> None:
         self._set_message(message, "PanelError.TLabel")
@@ -185,7 +221,8 @@ class Form:
         """Submit on Return from any field, and on button click."""
         self.button.configure(command=callback)
         for field in self.fields.values():
-            field.entry.bind("<Return>", lambda _event: callback())
+            if not field.multiline:  # Return inserts a newline in multi-line fields
+                field.entry.bind("<Return>", lambda _event: callback())
 
 
 def panel(master: tk.Misc, title: str, subtitle: str = "", wraplength: int = 340) -> ttk.Frame:
@@ -208,10 +245,14 @@ def screen_title(master: tk.Misc, title: str, back_text: str = "",
                    command=back_command).pack(anchor="w", pady=(0, styles.SPACE_MD))
     if eyebrow:
         ttk.Label(header, text=eyebrow.upper(), style="Eyebrow.TLabel").pack(anchor="w")
-    ttk.Label(header, text=title, style="Display.TLabel", wraplength=820, justify="left").pack(anchor="w")
+    title_label = ttk.Label(header, text=title, style="Display.TLabel", wraplength=760, justify="left")
+    title_label.pack(anchor="w")
+    wrap_to_container(title_label, header)
     if subtitle:
-        ttk.Label(header, text=subtitle, style="Meta.TLabel", wraplength=820, justify="left").pack(
-            anchor="w", pady=(2, 0))
+        subtitle_label = ttk.Label(header, text=subtitle, style="Meta.TLabel", wraplength=760,
+                                   justify="left")
+        subtitle_label.pack(anchor="w", pady=(2, 0))
+        wrap_to_container(subtitle_label, header)
     return header
 
 
@@ -222,6 +263,74 @@ def message_panel(master: tk.Misc, title: str, message: str, *, error: bool = Fa
     ttk.Label(frame, text=message, style="PanelFailure.TLabel" if error else "PanelBody.TLabel",
               wraplength=640, justify="left").pack(anchor="w", pady=(styles.SPACE_XS, 0))
     return frame
+
+
+class Table(ttk.Frame):
+    """A header plus rows that share one grid, so every column lines up exactly.
+
+    Each column is as wide as its widest cell (header included). Only columns
+    with ``stretch=True`` take the leftover width. A row is drawn as a Panel
+    band behind its cells; cells are created by callbacks that receive the
+    table as their parent.
+    """
+
+    ROW_GAP = styles.SPACE_XS
+    CELL_PAD_X = styles.SPACE_MD
+    CELL_PAD_Y = styles.SPACE_SM + 2
+
+    def __init__(self, master: tk.Misc, columns: list[tuple[str, bool]]) -> None:
+        super().__init__(master, style="App.TFrame")
+        self._column_count = len(columns)
+        self._row = 1
+        self._wrapped: list[tuple[ttk.Label, int]] = []
+        self._rewrap_pending = False
+        self.bind("<Configure>", lambda _event: self._schedule_rewrap(), add="+")
+        for column, (label, stretch) in enumerate(columns):
+            self.columnconfigure(column, weight=1 if stretch else 0)
+            ttk.Label(self, text=label, style="Eyebrow.TLabel").grid(
+                row=0, column=column, sticky="w", padx=self._pad_x(column), pady=(0, styles.SPACE_XS))
+
+    def wrap(self, label: ttk.Label, column: int) -> ttk.Label:
+        """Keep ``label`` (inside a cell of ``column``) wrapped to that column's current width."""
+        label.configure(wraplength=120)  # small start, so the column's width comes from the window
+        self._wrapped.append((label, column))
+        return label
+
+    def _schedule_rewrap(self) -> None:
+        # Measure once Tk is idle: during <Configure> the grid may not have settled yet.
+        if not self._rewrap_pending:
+            self._rewrap_pending = True
+            self.after_idle(self._rewrap)
+
+    def _rewrap(self) -> None:
+        self._rewrap_pending = False
+        for label, column in self._wrapped:
+            try:
+                width = self.grid_bbox(column, 0)[2] - sum(self._pad_x(column))
+                if width > 40 and int(str(label.cget("wraplength"))) != width:
+                    label.configure(wraplength=width)
+            except tk.TclError:
+                pass  # the table is being destroyed
+
+    def _pad_x(self, column: int) -> tuple[int, int]:
+        last = column == self._column_count - 1
+        return (self.CELL_PAD_X, self.CELL_PAD_X if last else 0)
+
+    def add_row(self, cells: list[Callable[[tk.Misc], tk.Widget]],
+                sticky: tuple[str, ...] = ()) -> None:
+        """Add one row. ``cells[i](table)`` builds column i; ``sticky[i]`` defaults to "w"."""
+        row = self._row
+        band = ttk.Frame(self, style="Panel.TFrame")
+        band.grid(row=row, column=0, columnspan=self._column_count, sticky="nsew",
+                  pady=(0, self.ROW_GAP))
+        for column, build in enumerate(cells):
+            widget = build(self)
+            widget.grid(row=row, column=column,
+                        sticky=sticky[column] if column < len(sticky) else "w",
+                        padx=self._pad_x(column),
+                        pady=(self.CELL_PAD_Y, self.CELL_PAD_Y + self.ROW_GAP))
+        band.lower()  # behind this row's cells
+        self._row += 1
 
 
 class ScrollFrame(ttk.Frame):

@@ -11,6 +11,9 @@ Statuses stored in ``bookings.status`` are ``confirmed`` and ``canceled``.
 "Completed" (a confirmed booking whose showtime has started) is derived when
 displaying history and is never written back to the database.
 
+The movie title is copied onto each booking when it is created, so later edits
+to a movie never rewrite booking history or receipts.
+
 Price per ticket is not stored separately; every seat in a booking is sold at
 the same price, so it is derived exactly as ``total_amount // ticket_count``.
 """
@@ -153,7 +156,8 @@ def _is_lock_error(exc: sqlite3.OperationalError) -> bool:
 
 _BOOKING_SELECT = """
     SELECT b.id, b.booking_reference, b.user_id, b.total_amount, b.status, b.created_at,
-           u.full_name, m.title, s.show_date, s.show_time, s.auditorium
+           u.full_name, COALESCE(b.movie_title, m.title) AS title,
+           s.show_date, s.show_time, s.auditorium
     FROM bookings b
     JOIN users u ON u.id = b.user_id
     JOIN showtimes s ON s.id = b.showtime_id
@@ -192,7 +196,7 @@ class BookingService:
                     raise SeatConflictError(taken)
 
                 total = movie.ticket_price * len(requested)
-                booking_id = self._insert_booking(conn, user_id, showtime.id, total)
+                booking_id = self._insert_booking(conn, user_id, showtime.id, total, movie.title)
                 try:
                     conn.executemany(
                         "INSERT INTO booked_seats (booking_id, showtime_id, seat_row, seat_number) "
@@ -214,14 +218,15 @@ class BookingService:
         return self.get_booking(user_id, booking_id)
 
     @staticmethod
-    def _insert_booking(conn: sqlite3.Connection, user_id: int, showtime_id: int, total: int) -> int:
+    def _insert_booking(conn: sqlite3.Connection, user_id: int, showtime_id: int, total: int,
+                        movie_title: str) -> int:
         for _ in range(REFERENCE_ATTEMPTS):
             reference = generate_booking_reference()
             try:
                 cursor = conn.execute(
-                    "INSERT INTO bookings (booking_reference, user_id, showtime_id, total_amount, status) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (reference, user_id, showtime_id, total, STATUS_CONFIRMED),
+                    "INSERT INTO bookings (booking_reference, user_id, showtime_id, total_amount, "
+                    "status, movie_title) VALUES (?, ?, ?, ?, ?, ?)",
+                    (reference, user_id, showtime_id, total, STATUS_CONFIRMED, movie_title),
                 )
                 return cursor.lastrowid
             except sqlite3.IntegrityError as exc:

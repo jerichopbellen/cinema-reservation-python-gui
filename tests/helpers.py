@@ -6,7 +6,7 @@ import datetime as dt
 from pathlib import Path
 
 from database.connection import get_connection
-from database.schema import create_schema
+from database.schema import apply_migrations, create_schema
 from database.seed import seed_sample_data
 
 SEED_DAY = dt.date(2030, 1, 1)          # sample showtimes run Jan 2–4, 2030
@@ -24,7 +24,8 @@ class FakeClock:
 
 
 def create_seeded_database(db_path: Path) -> None:
-    """Create the schema and sample data in ``db_path``, with showtimes relative to SEED_DAY."""
+    """Create the schema (with migrations, as the app does) and sample data relative to SEED_DAY."""
     with get_connection(db_path) as conn:
         create_schema(conn)
+        apply_migrations(conn)
         seed_sample_data(conn, today=SEED_DAY)

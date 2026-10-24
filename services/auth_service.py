@@ -19,7 +19,8 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-from database.connection import get_connection
+from database.connection import get_connection, write_transaction
+from database.schema import ROLE_ADMIN, ROLE_CUSTOMER
 from services.errors import UserFacingError
 
 HASH_ALGORITHM = "pbkdf2_sha256"
@@ -59,6 +60,13 @@ class UserNotFoundError(AuthError):
     """The session refers to a user that no longer exists."""
 
 
+class AuthorizationError(AuthError):
+    """The signed-in user lacks the role an operation requires."""
+
+    def __init__(self) -> None:
+        super().__init__("Administrator access is required for this action.")
+
+
 @dataclass(frozen=True)
 class User:
     """Public user data. Deliberately excludes password hash and salt."""
@@ -67,6 +75,11 @@ class User:
     full_name: str
     username: str
     created_at: str
+    role: str = ROLE_CUSTOMER
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == ROLE_ADMIN
 
 
 # --- Password hashing ---------------------------------------------------------
@@ -133,9 +146,12 @@ def validate_new_password(password: str, confirm_password: str, field: str = "pa
 
 # --- Service ------------------------------------------------------------------
 
+_USER_COLUMNS = "id, full_name, username, created_at, role"
+
+
 def _row_to_user(row: sqlite3.Row) -> User:
     return User(id=row["id"], full_name=row["full_name"], username=row["username"],
-                created_at=row["created_at"])
+                created_at=row["created_at"], role=row["role"])
 
 
 class AuthService:
@@ -145,7 +161,18 @@ class AuthService:
         self.db_path = db_path
 
     def register(self, full_name: str, username: str, password: str, confirm_password: str) -> User:
-        """Create an account. Raises :class:`ValidationError` on bad input or a taken username."""
+        """Create a customer account. Public registration can never create an administrator.
+
+        Raises :class:`ValidationError` on bad input or a taken username.
+        """
+        return self._create_account(full_name, username, password, confirm_password, ROLE_CUSTOMER)
+
+    def create_admin(self, full_name: str, username: str, password: str, confirm_password: str) -> User:
+        """Create an administrator account. Only the ``create_admin.py`` setup utility calls this."""
+        return self._create_account(full_name, username, password, confirm_password, ROLE_ADMIN)
+
+    def _create_account(self, full_name: str, username: str, password: str, confirm_password: str,
+                        role: str) -> User:
         full_name = clean_full_name(full_name)
         username = clean_username(username)
         validate_new_password(password, confirm_password)
@@ -159,9 +186,9 @@ class AuthService:
         with get_connection(self.db_path) as conn:
             try:
                 cursor = conn.execute(
-                    "INSERT INTO users (full_name, username, password_hash, password_salt) "
-                    "VALUES (?, ?, ?, ?)",
-                    (full_name, username, password_hash, password_salt),
+                    "INSERT INTO users (full_name, username, password_hash, password_salt, role) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (full_name, username, password_hash, password_salt, role),
                 )
             except sqlite3.IntegrityError as exc:
                 # Another registration may have claimed the name since the check above.
@@ -169,8 +196,7 @@ class AuthService:
                     raise ValidationError("username", "That username is already taken.") from exc
                 raise
             row = conn.execute(
-                "SELECT id, full_name, username, created_at FROM users WHERE id = ?",
-                (cursor.lastrowid,),
+                f"SELECT {_USER_COLUMNS} FROM users WHERE id = ?", (cursor.lastrowid,)
             ).fetchone()
         return _row_to_user(row)
 
@@ -182,7 +208,7 @@ class AuthService:
 
         with get_connection(self.db_path) as conn:
             row = conn.execute(
-                "SELECT id, full_name, username, created_at, password_hash, password_salt "
+                f"SELECT {_USER_COLUMNS}, password_hash, password_salt "
                 "FROM users WHERE username = ?",
                 (username,),
             ).fetchone()
@@ -199,11 +225,51 @@ class AuthService:
         """Load a user by ID or raise :class:`UserNotFoundError`."""
         with get_connection(self.db_path) as conn:
             row = conn.execute(
-                "SELECT id, full_name, username, created_at FROM users WHERE id = ?", (user_id,)
+                f"SELECT {_USER_COLUMNS} FROM users WHERE id = ?", (user_id,)
             ).fetchone()
         if row is None:
             raise UserNotFoundError("Your account could not be found. Please log in again.")
         return _row_to_user(row)
+
+    def require_admin(self, user_id: int) -> User:
+        """Re-read the user's role from the database; raise unless they are an administrator.
+
+        Privileged services call this before every operation, so a role cached
+        in the GUI or session is never trusted.
+        """
+        user = self.get_user(user_id)
+        if not user.is_admin:
+            raise AuthorizationError()
+        return user
+
+    def find_user(self, username: str) -> User:
+        """Look up an account by username (case-insensitive) or raise :class:`UserNotFoundError`."""
+        username = (username or "").strip()
+        with get_connection(self.db_path) as conn:
+            row = conn.execute(f"SELECT {_USER_COLUMNS} FROM users WHERE username = ?",
+                               (username,)).fetchone()
+        if row is None:
+            raise UserNotFoundError(f"No account with the username '{username}' exists.")
+        return _row_to_user(row)
+
+    def set_role(self, username: str, role: str) -> User:
+        """Change an existing account's role. Only the ``promote_admin.py`` utility calls this.
+
+        Raises :class:`UserNotFoundError` for an unknown username and
+        :class:`AuthError` if the account already has ``role``.
+        """
+        if role not in (ROLE_CUSTOMER, ROLE_ADMIN):
+            raise ValueError(f"Unknown role: {role!r}")
+        user = self.find_user(username)
+        if user.role == role:
+            raise AuthError(f"'{user.username}' is already {'an administrator' if role == ROLE_ADMIN else 'a customer'}.")
+        with write_transaction(self.db_path) as conn:
+            # The role guard makes a concurrent identical change a no-op instead of a double update.
+            updated = conn.execute("UPDATE users SET role = ? WHERE id = ? AND role <> ?",
+                                   (role, user.id, role)).rowcount
+        if updated != 1:
+            raise AuthError(f"The role of '{user.username}' changed while updating. Please try again.")
+        return self.get_user(user.id)
 
     def update_full_name(self, user_id: int, full_name: str) -> User:
         """Change the user's full name and return the updated user."""
